@@ -10,15 +10,15 @@
 
 policy_metadata:
   policy_id: "pol-cis-enterprise-2026-10"
-  version: "2026.10.3"
-  name: "Enterprise CIS Benchmark L1/L2 + NIS2 & ISO 27001:2022 Baseline (Windows & Linux)"
+  version: "2026.10.4"
+  name: "Enterprise CIS Benchmark L1/L2 + NIS2 & ISO 27001:2022 Baseline (Windows & Linux - 42 Rules)"
   author: "Principal Security Architecture Team"
-  published_at: "2026-10-17T22:00:00Z"
+  published_at: "2026-10-20T11:00:00Z"
   signature_ed25519: "auto-signed-by-pki-engine"
 
 rules:
   # ============================================================================
-  # WINDOWS CIS BENCHMARK & ATTACK SURFACE RULES (12 KOMPLETNYCH REGUŁ)
+  # WINDOWS CIS BENCHMARK & ATTACK SURFACE RULES (22 KOMPLETNE REGUŁY)
   # ============================================================================
 
   - rule_id: "WIN-CIS-18.3.1"
@@ -349,8 +349,274 @@ rules:
       Zatrzymaj i odinstaluj usługi nasłuchujące na niebezpiecznych portach (Telnet Server, FTP Server)
       oraz zablokuj te porty na zaporze: New-NetFirewallRule -DisplayName "Block Legacy Ports" -Direction Inbound -LocalPort 21,23,69,513,514 -Protocol TCP -Action Block.
 
+  - rule_id: "WIN-CIS-18.9.30.2"
+    os_family: "windows"
+    category: "Network Protocol Hardening"
+    title: "Ensure 'Turn off multicast name resolution' (LLMNR) is set to 'Enabled'"
+    benchmark_ref: "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0 - 18.9.30.2"
+    mitre_attack: ["T1557.001"]
+    compliance_frameworks:
+      iso27001: "A.8.20 (Zabezpieczenie protokołów rozpoznawania nazw)"
+      nis2: "Art. 21 ust. 2 lit. e (Ochrona przed podsłuchem w sieci LAN)"
+      ksc: "Zał. 1 pkt 14 (Wyłączenie podatnych mechanizmów multicastowych)"
+    risk_severity: "HIGH"
+    cvss_base_score: 7.5
+    description: >
+      LLMNR (Link-Local Multicast Name Resolution) umożliwia napastnikowi podszycie się
+      pod nieistniejący zasób sieciowy i przechwycenie hashy NTLMv2 narzędziami typu Responder.
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SOFTWARE\Policies\Microsoft\Windows NT\DNSClient'
+      value_name: "EnableMulticast"
+    expected_state:
+      operator: "equals"
+      value: 0
+      expected_reg_type: "REG_DWORD"
+    remediation: >
+      W GPO: Computer Configuration -> Administrative Templates -> Network -> DNS Client ->
+      Turn off multicast name resolution ustaw na Enabled (EnableMulticast = 0).
+
+  - rule_id: "WIN-CIS-2.3.7.4"
+    os_family: "windows"
+    category: "Network Security"
+    title: "Ensure 'Microsoft network client: Digitally sign communications (always)' is set to 'Enabled'"
+    benchmark_ref: "CIS Microsoft Windows Server 2022 Benchmark v3.0.0 - 2.3.7.4"
+    mitre_attack: ["T1557"]
+    compliance_frameworks:
+      iso27001: "A.8.24 (Kryptograficzny podpis sesji sieciowych)"
+      nis2: "Art. 21 ust. 2 lit. h (Ochrona integralności protokołów)"
+      ksc: "Zał. 1 pkt 12 (Wymuszenie podpisów kryptograficznych SMB)"
+    risk_severity: "HIGH"
+    cvss_base_score: 7.9
+    description: >
+      Wymuszenie podpisu cyfrowego pakietów SMB chroni komunikację przed atakami
+      typu Man-in-the-Middle oraz NTLM/SMB Relay.
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters'
+      value_name: "RequireSecuritySignature"
+    expected_state:
+      operator: "equals"
+      value: 1
+      expected_reg_type: "REG_DWORD"
+    remediation: >
+      Ustaw klucz HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters\RequireSecuritySignature (DWORD) = 1.
+
+  - rule_id: "WIN-CIS-18.9.5.1"
+    os_family: "windows"
+    category: "Endpoint Protection & Antivirus"
+    title: "Ensure 'Windows Defender Antivirus: Real-time Protection' is Enabled"
+    benchmark_ref: "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0 - 18.9.5.1"
+    mitre_attack: ["T1562.001"]
+    compliance_frameworks:
+      iso27001: "A.8.7 (Ochrona przed złośliwym oprogramowaniem)"
+      nis2: "Art. 21 ust. 2 lit. e (Ciągłe skanowanie punktów końcowych)"
+      ksc: "Zał. 1 pkt 17 (Aktywna ochrona antywirusowa w czasie rzeczywistym)"
+    risk_severity: "CRITICAL"
+    cvss_base_score: 9.1
+    description: >
+      Skanowanie w czasie rzeczywistym jest kluczowym komponentem antywirusa Windows Defender.
+      Wyłączenie tej opcji uniemożliwia natychmiastowe blokowanie złośliwych plików.
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SOFTWARE\Microsoft\Windows Defender\Real-Time Protection'
+      value_name: "DisableRealtimeMonitoring"
+    expected_state:
+      operator: "in_set"
+      allowed_values: [0, null]
+      expected_reg_type: "REG_DWORD"
+    remediation: >
+      Ustaw klucz HKLM\SOFTWARE\Microsoft\Windows Defender\Real-Time Protection\DisableRealtimeMonitoring (DWORD) = 0.
+
+  - rule_id: "WIN-CIS-18.8.19.2"
+    os_family: "windows"
+    category: "Credential Protection"
+    title: "Ensure 'Do not allow passwords to be saved' in Remote Desktop Connection is Enabled"
+    benchmark_ref: "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0 - 18.8.19.2"
+    mitre_attack: ["T1555"]
+    compliance_frameworks:
+      iso27001: "A.5.17 (Ochrona zapisanych poświadczeń użytkowników)"
+      nis2: "Art. 21 ust. 2 lit. j (Higiena poświadczeń sesji zdalnych)"
+      ksc: "Zał. 1 pkt 8 (Blokada trwałego buforowania haseł w systemie)"
+    risk_severity: "MEDIUM"
+    cvss_base_score: 6.2
+    description: >
+      Zezwalanie na zapamiętywanie haseł RDP umożliwia napastnikowi po przejęciu stacji roboczej
+      odczytanie zapisanych haseł do serwerów z menedżera poświadczeń.
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services'
+      value_name: "DisablePasswordSaving"
+    expected_state:
+      operator: "equals"
+      value: 1
+      expected_reg_type: "REG_DWORD"
+    remediation: >
+      Ustaw klucz HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services\DisablePasswordSaving (DWORD) = 1.
+
+  - rule_id: "WIN-CIS-18.5.11.2"
+    os_family: "windows"
+    category: "Removable Media & Peripherals"
+    title: "Ensure 'Turn off Autoplay' is set to 'Enabled: All drives'"
+    benchmark_ref: "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0 - 18.5.11.2"
+    mitre_attack: ["T1091"]
+    compliance_frameworks:
+      iso27001: "A.7.10 (Ochrona nośników wymiennych)"
+      nis2: "Art. 21 ust. 2 lit. e (Ochrona przed atakami przez porty USB)"
+      ksc: "Zał. 1 pkt 19 (Blokada automatycznego wykonywania kodu z nośników)"
+    risk_severity: "HIGH"
+    cvss_base_score: 7.2
+    description: >
+      Autoodtwarzanie pozwala na natychmiastowe wykonanie kodu z podłączonych pamięci USB
+      lub płyt CD/DVD, co stanowi częsty wektor infekcji robakami i atakami BadUSB.
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer'
+      value_name: "NoDriveTypeAutoRun"
+    expected_state:
+      operator: "equals"
+      value: 255
+      expected_reg_type: "REG_DWORD"
+    remediation: >
+      Ustaw klucz HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer\NoDriveTypeAutoRun (DWORD) = 255.
+
+  - rule_id: "WIN-CIS-18.9.15.1"
+    os_family: "windows"
+    category: "Data-at-Rest & Encryption"
+    title: "Ensure BitLocker Drive Encryption protection is active on System Volume (C:)"
+    benchmark_ref: "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0 - 18.9.15.1"
+    mitre_attack: ["T1005"]
+    compliance_frameworks:
+      iso27001: "A.8.24 (Szyfrowanie dysków i danych spoczynkowych)"
+      nis2: "Art. 21 ust. 2 lit. h (Szyfrowanie magazynów danych)"
+      ksc: "Zał. 1 pkt 10 (Ochrona kryptograficzna pamięci masowych)"
+    risk_severity: "HIGH"
+    cvss_base_score: 8.0
+    description: >
+      Szyfrowanie dysku systemowego za pomocą BitLocker uniemożliwia odczyt danych i haseł
+      po kradzieży dysku lub uruchomieniu maszyny z zewnętrznego systemu live-USB.
+    collector:
+      type: "windows_bitlocker_status"
+      target_drive: "C:"
+    expected_state:
+      operator: "equals"
+      value: 1
+    remediation: >
+      Włącz BitLocker dla dysku C:: Enable-BitLocker -MountPoint "C:" -EncryptionMethod XtsAes256 -UsedSpaceOnly -TpmProtector.
+
+  - rule_id: "WIN-CIS-2.3.1.5"
+    os_family: "windows"
+    category: "Password & Account Policies"
+    title: "Ensure 'Accounts: Administrator account status' is set to 'Disabled' or renamed"
+    benchmark_ref: "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0 - 2.3.1.5"
+    mitre_attack: ["T1078.001"]
+    compliance_frameworks:
+      iso27001: "A.8.2 (Ograniczenie domyślnych kont administracyjnych)"
+      nis2: "Art. 21 ust. 2 lit. i (Kontrola kont o najwyższych uprawnieniach)"
+      ksc: "Zał. 1 pkt 6 (Zabezpieczenie konta Administrator)"
+    risk_severity: "HIGH"
+    cvss_base_score: 7.7
+    description: >
+      Wbudowane konto Administrator posiada znany identyfikator SID (-500) i nie podlega
+      blokadzie po błędnych próbach logowania, co czyni je głównym celem ataków brute-force.
+    collector:
+      type: "windows_sam_admin_status"
+      target: "Win32API::NetUserGetInfo(Administrator)"
+    expected_state:
+      operator: "equals"
+      value: 0
+    remediation: >
+      Wyłącz wbudowane konto Administrator: Disable-LocalUser -Name "Administrator" (lub zmień jego nazwę w GPO).
+
+  - rule_id: "WIN-CIS-18.9.84.1"
+    os_family: "windows"
+    category: "Remote Management & WinRM"
+    title: "Ensure Windows Remote Management (WinRM) Basic Authentication is disabled"
+    benchmark_ref: "CIS Microsoft Windows Server 2022 Benchmark v3.0.0 - 18.9.84.1"
+    mitre_attack: ["T1021.006"]
+    compliance_frameworks:
+      iso27001: "A.8.24 (Bezpieczne protokoły zarządzania zdalnego)"
+      nis2: "Art. 21 ust. 2 lit. j (Eliminacja uwierzytelniania tekstem jawnym)"
+      ksc: "Zał. 1 pkt 11 (Ochrona usług zdalnego zarządzania)"
+    risk_severity: "HIGH"
+    cvss_base_score: 7.8
+    description: >
+      Podstawowe uwierzytelnianie (Basic Auth) w protokole WinRM przesyła poświadczenia
+      w postaci słabo chronionej, co naraża sesję administracyjną na podsłuch i kradzież poświadczeń.
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SOFTWARE\Policies\Microsoft\Windows\WinRM\Client'
+      value_name: "AllowBasic"
+    expected_state:
+      operator: "in_set"
+      allowed_values: [0, null]
+      expected_reg_type: "REG_DWORD"
+    remediation: >
+      Ustaw klucz HKLM\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client\AllowBasic (DWORD) = 0
+      oraz HKLM\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service\AllowBasic (DWORD) = 0.
+
+  - rule_id: "WIN-CIS-18.9.102.3"
+    os_family: "windows"
+    category: "Session Management & Screen Lock"
+    title: "Ensure 'Machine inactivity limit' is set to 900 or fewer seconds (Screen Saver Lockout)"
+    benchmark_ref: "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0 - 18.9.102.3"
+    mitre_attack: ["T1078"]
+    compliance_frameworks:
+      iso27001: "A.7.7 (Czyste biurko i czysty ekran)"
+      nis2: "Art. 21 ust. 2 lit. g (Automatyczna blokada nieaktywnych sesji)"
+      ksc: "Zał. 1 pkt 8 (Wygaszanie i blokada stacji roboczych)"
+    risk_severity: "MEDIUM"
+    cvss_base_score: 5.3
+    description: >
+      Pozostawienie odblokowanej stacji roboczej po odejściu pracownika pozwala osobom
+      trzecim na bezpośredni dostęp do systemów organizacji bez znajomości hasła.
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+      value_name: "InactivityTimeoutSecs"
+    expected_state:
+      operator: "greater_than_or_equal"
+      value: 60
+    remediation: >
+      W GPO: Computer Configuration -> Windows Settings -> Security Settings -> Local Policies ->
+      Security Options -> Interactive logon: Machine inactivity limit ustaw na maksymalnie 900 sekund (15 min).
+
+  - rule_id: "WIN-CIS-18.4.1"
+    os_family: "windows"
+    category: "Cryptography & PKI"
+    title: "Ensure 'Strong private key protection for stored certificates' is enforced"
+    benchmark_ref: "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0 - 18.4.1"
+    mitre_attack: ["T1552.004"]
+    compliance_frameworks:
+      iso27001: "A.8.24 (Ochrona kluczy prywatnych kryptografii)"
+      nis2: "Art. 21 ust. 2 lit. h (Bezpieczeństwo certyfikatów i kluczy)"
+      ksc: "Zał. 1 pkt 12 (Izolacja kluczy kryptograficznych w magazynie CryptoAPI)"
+    risk_severity: "MEDIUM"
+    cvss_base_score: 6.8
+    description: >
+      Wymuszenie ochrony kluczy prywatnych certyfikatów X.509 użytkowników zapobiega
+      ich cichemu eksportowi przez nieautoryzowane procesy pracujące w tle.
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SOFTWARE\Policies\Microsoft\Cryptography'
+      value_name: "ForceKeyProtection"
+    expected_state:
+      operator: "in_set"
+      allowed_values: [1, 2]
+      expected_reg_type: "REG_DWORD"
+    remediation: >
+      Ustaw klucz HKLM\SOFTWARE\Policies\Microsoft\Cryptography\ForceKeyProtection (DWORD) = 2.
+
   # ============================================================================
-  # LINUX (DEBIAN / UBUNTU) CIS BENCHMARK & ATTACK SURFACE RULES (10 REGUŁ)
+  # LINUX (DEBIAN / UBUNTU) CIS BENCHMARK & ATTACK SURFACE RULES (20 REGUŁ)
   # ============================================================================
 
   - rule_id: "LNX-CIS-5.2.8"
@@ -621,4 +887,266 @@ rules:
       value: 0
     remediation: >
       Wyłącz niebezpieczne demony (systemctl stop telnet.socket vsftpd rsh.socket) oraz zablokuj ruch przychodzący w nftables/ufw.
+
+  - rule_id: "LNX-CIS-1.6.1"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Mandatory Access Control"
+    title: "Ensure AppArmor or SELinux is installed, enabled, and in enforcing mode"
+    benchmark_ref: "CIS Debian Linux 12 Benchmark v1.0.0 - 1.6.1"
+    mitre_attack: ["T1068", "T1548"]
+    compliance_frameworks:
+      iso27001: "A.8.2 (Ograniczenie praw dostępu i izolacja procesów)"
+      nis2: "Art. 21 ust. 2 lit. e (Ochrona przed eskalacją uprawnień w jądrze)"
+      ksc: "Zał. 1 pkt 4 (Stosowanie mechanizmów Mandatory Access Control MAC)"
+    risk_severity: "HIGH"
+    cvss_base_score: 8.2
+    description: >
+      Systemy Mandatory Access Control (AppArmor / SELinux) wymuszają granularne reguły
+      dostępu do plików, gniazd i pamięci, ograniczając skutki podatności w aplikacjach.
+    collector:
+      type: "linux_mac_status"
+    expected_state:
+      operator: "in_set"
+      allowed_values: ["enforcing", "active"]
+    remediation: >
+      Włącz AppArmor: systemctl enable --now apparmor && aa-enforce /etc/apparmor.d/*
+      (lub ustaw SELINUX=enforcing w /etc/selinux/config).
+
+  - rule_id: "LNX-CIS-3.3.1"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Kernel Network Hardening"
+    title: "Ensure source routed packets are not accepted (accept_source_route = 0)"
+    benchmark_ref: "CIS Ubuntu Linux 24.04 LTS Benchmark v1.0.0 - 3.3.1"
+    mitre_attack: ["T1090"]
+    compliance_frameworks:
+      iso27001: "A.8.20 (Zabezpieczenie routingu pakietów)"
+      nis2: "Art. 21 ust. 2 lit. e (Ochrona przed podszywaniem się pod IP)"
+      ksc: "Zał. 1 pkt 15 (Ochrona przed atakami Source Routing)"
+    risk_severity: "MEDIUM"
+    cvss_base_score: 5.8
+    description: >
+      Pakiety Source Routing pozwalają nadawcy na określenie dokładnej trasy przez sieć,
+      co może posłużyć do ominięcia zapór sieciowych i mechanizmów filtrowania.
+    collector:
+      type: "linux_proc_sysctl"
+      sysctl_keys:
+        - "net.ipv4.conf.all.accept_source_route"
+        - "net.ipv4.conf.default.accept_source_route"
+    expected_state:
+      operator: "all_equal"
+      value: 0
+    remediation: >
+      Ustaw net.ipv4.conf.all.accept_source_route=0 oraz net.ipv4.conf.default.accept_source_route=0
+      w /etc/sysctl.d/60-cis-net.conf i przeładuj sysctl --system.
+
+  - rule_id: "LNX-CIS-3.3.2"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Kernel Network Hardening"
+    title: "Ensure TCP SYN Cookies are enabled (net.ipv4.tcp_syncookies = 1)"
+    benchmark_ref: "CIS Debian Linux 12 Benchmark v1.0.0 - 3.3.2"
+    mitre_attack: ["T1498"]
+    compliance_frameworks:
+      iso27001: "A.8.20 (Ochrona przed atakami typu Denial-of-Service)"
+      nis2: "Art. 21 ust. 2 lit. d (Ciągłość działania i odporność na ataki DoS)"
+      ksc: "Zał. 1 pkt 16 (Mechanizmy obrony przed zalewaniem SYN Flood)"
+    risk_severity: "HIGH"
+    cvss_base_score: 7.5
+    description: >
+      Mechanizm SYN Cookies chroni serwer przed atakami typu SYN Flood, zapobiegając
+      wyczerpaniu kolejki połączeń przychodzących w jądrze Linux.
+    collector:
+      type: "linux_proc_sysctl"
+      sysctl_keys:
+        - "net.ipv4.tcp_syncookies"
+    expected_state:
+      operator: "equals"
+      value: 1
+    remediation: >
+      Ustaw net.ipv4.tcp_syncookies = 1 w /etc/sysctl.d/60-cis-net.conf i wykonaj: sysctl -w net.ipv4.tcp_syncookies=1.
+
+  - rule_id: "LNX-CIS-5.4.1.1"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Password & Account Policies"
+    title: "Ensure password hashing algorithm is SHA-512 or YESCRYPT"
+    benchmark_ref: "CIS Ubuntu Linux 24.04 LTS Benchmark v1.0.0 - 5.4.1.1"
+    mitre_attack: ["T1110"]
+    compliance_frameworks:
+      iso27001: "A.5.17 (Stosowanie nowoczesnej kryptografii haseł)"
+      nis2: "Art. 21 ust. 2 lit. h (Higiena kryptograficzna poświadczeń)"
+      ksc: "Zał. 1 pkt 8 (Wymóg silnego algorytmu SHA-512/Yescrypt dla haseł)"
+    risk_severity: "HIGH"
+    cvss_base_score: 8.1
+    description: >
+      Stosowanie przestarzałych skrótów haseł (MD5 lub DES) w /etc/shadow umożliwia
+      błyskawiczne złamanie haseł przez atakującego narzędziami Hashcat / John the Ripper.
+    collector:
+      type: "linux_login_defs"
+      parameter: "ENCRYPT_METHOD"
+    expected_state:
+      operator: "in_set"
+      allowed_values: ["SHA512", "YESCRYPT"]
+    remediation: >
+      W pliku /etc/login.defs ustaw: ENCRYPT_METHOD YESCRYPT (lub ENCRYPT_METHOD SHA512).
+
+  - rule_id: "LNX-CIS-5.2.10"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "SSH Hardening"
+    title: "Ensure SSH password authentication is disabled (require public key authentication)"
+    benchmark_ref: "CIS Debian Linux 12 Benchmark v1.0.0 - 5.2.10"
+    mitre_attack: ["T1110.001", "T1021.004"]
+    compliance_frameworks:
+      iso27001: "A.8.5 (Uwierzytelnianie bezpiecznymi kluczami kryptograficznymi)"
+      nis2: "Art. 21 ust. 2 lit. j (Wyeliminowanie haseł statycznych w dostępie zdalnym)"
+      ksc: "Zał. 1 pkt 11 (Wymóg uwierzytelniania asymetrycznego w SSH)"
+    risk_severity: "HIGH"
+    cvss_base_score: 8.0
+    description: >
+      Wyłączenie uwierzytelniania hasłem w usłudze SSH eliminuje ryzyko udanego ataku
+      brute-force i zmusza administratorów do stosowania bezpiecznych kluczy Ed25519 / RSA.
+    collector:
+      type: "linux_sshd_effective_config"
+      directive: "passwordauthentication"
+    expected_state:
+      operator: "equals"
+      value: "no"
+      case_sensitive: false
+    remediation: >
+      W /etc/ssh/sshd_config ustaw: PasswordAuthentication no i wykonaj: systemctl reload sshd.
+
+  - rule_id: "LNX-CIS-1.7.1"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Kernel Memory Protection"
+    title: "Ensure core dumps of SUID programs are restricted (fs.suid_dumpable = 0)"
+    benchmark_ref: "CIS Ubuntu Linux 24.04 LTS Benchmark v1.0.0 - 1.7.1"
+    mitre_attack: ["T1003"]
+    compliance_frameworks:
+      iso27001: "A.8.7 (Ochrona pamięci procesów przed wyciekiem)"
+      nis2: "Art. 21 ust. 2 lit. e (Ochrona poświadczeń w pamięci RAM)"
+      ksc: "Zał. 1 pkt 9 (Blokada zrzutów pamięci procesów uprzywilejowanych SUID)"
+    risk_severity: "MEDIUM"
+    cvss_base_score: 6.5
+    description: >
+      Zrzuty pamięci (Core Dumps) programów działających z uprawnieniami SUID/SGID mogą
+      zawierać wrażliwe dane, w tym hasła w postaci jawnej, klucze sesji i tokeny.
+    collector:
+      type: "linux_proc_sysctl"
+      sysctl_keys:
+        - "fs.suid_dumpable"
+    expected_state:
+      operator: "equals"
+      value: 0
+    remediation: >
+      Ustaw fs.suid_dumpable = 0 w /etc/sysctl.d/60-cis-kernel.conf i wykonaj: sysctl -w fs.suid_dumpable=0.
+
+  - rule_id: "LNX-CIS-5.1.1"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Filesystem Integrity & Permissions"
+    title: "Ensure permissions on /etc/crontab are configured (0600 root:root)"
+    benchmark_ref: "CIS Debian Linux 12 Benchmark v1.0.0 - 5.1.1"
+    mitre_attack: ["T1053.003"]
+    compliance_frameworks:
+      iso27001: "A.8.9 (Integralność harmonogramu zadań systemowych)"
+      nis2: "Art. 21 ust. 2 lit. e (Ochrona przed nieautoryzowanym uruchamianiem zadań)"
+      ksc: "Zał. 1 pkt 7 (Kontrola uprawnień plików harmonogramu zadań cron)"
+    risk_severity: "HIGH"
+    cvss_base_score: 7.8
+    description: >
+      Nieuprawniony zapis do /etc/crontab pozwala lokalnemu użytkownikowi na natychmiastową
+      eskalację uprawnień do poziomu root poprzez dopisanie własnego złośliwego zadania.
+    collector:
+      type: "linux_file_stat"
+      target_path: "/etc/crontab"
+    expected_state:
+      operator: "file_acl_match"
+      expected_uid: 0
+      expected_owner: "root"
+      allowed_groups: ["root"]
+      forbidden_mode_bits_octal: "0177"
+    remediation: >
+      Wykonaj: chown root:root /etc/crontab && chmod 0600 /etc/crontab.
+
+  - rule_id: "LNX-CIS-3.2.2"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Kernel Network Hardening"
+    title: "Ensure ICMP broadcast echo requests are ignored (Smurf attack protection)"
+    benchmark_ref: "CIS Ubuntu Linux 24.04 LTS Benchmark v1.0.0 - 3.2.2"
+    mitre_attack: ["T1498"]
+    compliance_frameworks:
+      iso27001: "A.8.20 (Ochrona sieci przed atakami amplifikacyjnymi)"
+      nis2: "Art. 21 ust. 2 lit. d (Odporność na ataki DoS / Smurf)"
+      ksc: "Zał. 1 pkt 16 (Ignorowanie zapytań rozgłoszeniowych ICMP)"
+    risk_severity: "LOW"
+    cvss_base_score: 4.8
+    description: >
+      Odpowiadanie na pakiety ICMP Echo wysyłane na adres rozgłoszeniowy (Broadcast) może
+      zostać wykorzystane do ataków amplifikacyjnych DoS (Smurf Attack).
+    collector:
+      type: "linux_proc_sysctl"
+      sysctl_keys:
+        - "net.ipv4.icmp_echo_ignore_broadcasts"
+    expected_state:
+      operator: "equals"
+      value: 1
+    remediation: >
+      Ustaw net.ipv4.icmp_echo_ignore_broadcasts = 1 w /etc/sysctl.d/60-cis-net.conf i wykonaj: sysctl -w net.ipv4.icmp_echo_ignore_broadcasts=1.
+
+  - rule_id: "LNX-CIS-3.2.4"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Kernel Network Hardening"
+    title: "Ensure suspicious packets (Martians) are logged"
+    benchmark_ref: "CIS Debian Linux 12 Benchmark v1.0.0 - 3.2.4"
+    mitre_attack: ["T1046"]
+    compliance_frameworks:
+      iso27001: "A.8.15 (Rejestrowanie zdarzeń sieciowych i anomalii)"
+      nis2: "Art. 21 ust. 2 lit. b (Wykrywanie pakietów ze sfałszowanym adresem źródłowym)"
+      ksc: "Zał. 1 pkt 18 (Monitorowanie anomalii pakietów w jądrze)"
+    risk_severity: "LOW"
+    cvss_base_score: 4.5
+    description: >
+      Logowanie pakietów ze sfałszowanym lub niemożliwym do wytrasowania adresem (Martian Packets)
+      ułatwia wykrywanie prób skanowania i spoofingu sieciowego.
+    collector:
+      type: "linux_proc_sysctl"
+      sysctl_keys:
+        - "net.ipv4.conf.all.log_martians"
+        - "net.ipv4.conf.default.log_martians"
+    expected_state:
+      operator: "all_equal"
+      value: 1
+    remediation: >
+      Ustaw net.ipv4.conf.all.log_martians = 1 oraz net.ipv4.conf.default.log_martians = 1 w /etc/sysctl.d/60-cis-net.conf.
+
+  - rule_id: "LNX-CIS-5.4.4"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Filesystem Integrity & Permissions"
+    title: "Ensure default user umask is 027 or more restrictive"
+    benchmark_ref: "CIS Ubuntu Linux 24.04 LTS Benchmark v1.0.0 - 5.4.4"
+    mitre_attack: ["T1078"]
+    compliance_frameworks:
+      iso27001: "A.8.9 (Domyślne restrykcyjne uprawnienia nowych plików)"
+      nis2: "Art. 21 ust. 2 lit. e (Ochrona poufności danych użytkowników)"
+      ksc: "Zał. 1 pkt 9 (Zabezpieczenie domyślnej maski uprawnień umask 027)"
+    risk_severity: "MEDIUM"
+    cvss_base_score: 5.5
+    description: >
+      Zbyt otwarta maska tworzenia plików (np. umask 022 lub 002) pozwala innym lokalnym
+      użytkownikom na odczyt nowo utworzonych plików i katalogów.
+    collector:
+      type: "linux_login_defs"
+      parameter: "UMASK"
+    expected_state:
+      operator: "in_set"
+      allowed_values: ["027", "077"]
+    remediation: >
+      W pliku /etc/login.defs oraz /etc/profile ustaw: UMASK 027.
 

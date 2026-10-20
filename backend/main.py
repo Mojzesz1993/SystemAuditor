@@ -387,6 +387,106 @@ def seed_enterprise_fleet_if_empty(include_demo: bool = False) -> None:
                     "collected_at": now_iso,
                     "status": "COLLECTED",
                 },
+                {
+                    "check_id": "LNX-CIS-1.6.1",
+                    "category": "Mandatory Access Control",
+                    "title": "Ensure AppArmor or SELinux is installed, enabled, and in enforcing mode",
+                    "collector_type": "linux_mac_status",
+                    "target": "/sys/kernel/security/apparmor",
+                    "raw_value": {"value": "enforcing"},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-3.3.1",
+                    "category": "Kernel Network Hardening",
+                    "title": "Ensure source routed packets are not accepted",
+                    "collector_type": "linux_proc_sysctl",
+                    "target": "net.ipv4.conf.*.accept_source_route",
+                    "raw_value": {"values": {"net.ipv4.conf.all.accept_source_route": 0, "net.ipv4.conf.default.accept_source_route": 0}},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-3.3.2",
+                    "category": "Kernel Network Hardening",
+                    "title": "Ensure TCP SYN Cookies are enabled",
+                    "collector_type": "linux_proc_sysctl",
+                    "target": "net.ipv4.tcp_syncookies",
+                    "raw_value": {"value": 1},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-5.4.1.1",
+                    "category": "Password & Account Policies",
+                    "title": "Ensure password hashing algorithm is SHA-512 or YESCRYPT",
+                    "collector_type": "linux_login_defs",
+                    "target": "/etc/login.defs::ENCRYPT_METHOD",
+                    "raw_value": {"value": "YESCRYPT"},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-5.2.10",
+                    "category": "SSH Hardening",
+                    "title": "Ensure SSH password authentication is disabled",
+                    "collector_type": "linux_sshd_effective_config",
+                    "target": "/etc/ssh/sshd_config::PasswordAuthentication",
+                    "raw_value": {"value": "no"},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-1.7.1",
+                    "category": "Kernel Memory Protection",
+                    "title": "Ensure core dumps of SUID programs are restricted",
+                    "collector_type": "linux_proc_sysctl",
+                    "target": "fs.suid_dumpable",
+                    "raw_value": {"value": 0},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-5.1.1",
+                    "category": "Filesystem Integrity & Permissions",
+                    "title": "Ensure permissions on /etc/crontab are configured",
+                    "collector_type": "linux_file_stat",
+                    "target": "/etc/crontab",
+                    "raw_value": {"uid": 0, "owner": "root", "group": "root", "mode_octal": "0600"},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-3.2.2",
+                    "category": "Kernel Network Hardening",
+                    "title": "Ensure ICMP broadcast echo requests are ignored",
+                    "collector_type": "linux_proc_sysctl",
+                    "target": "net.ipv4.icmp_echo_ignore_broadcasts",
+                    "raw_value": {"value": 1},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-3.2.4",
+                    "category": "Kernel Network Hardening",
+                    "title": "Ensure suspicious packets (Martians) are logged",
+                    "collector_type": "linux_proc_sysctl",
+                    "target": "net.ipv4.conf.*.log_martians",
+                    "raw_value": {"values": {"net.ipv4.conf.all.log_martians": 1, "net.ipv4.conf.default.log_martians": 1}},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-5.4.4",
+                    "category": "Filesystem Integrity & Permissions",
+                    "title": "Ensure default user umask is 027 or more restrictive",
+                    "collector_type": "linux_login_defs",
+                    "target": "/etc/login.defs::UMASK",
+                    "raw_value": {"value": "027"},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
             ],
         },
         {
@@ -500,6 +600,106 @@ def seed_enterprise_fleet_if_empty(include_demo: bool = False) -> None:
                     "collector_type": "network_listening_ports",
                     "target": "/proc/net/tcp",
                     "raw_value": {"value": 2, "exposed_ports": [21, 23]},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-1.6.1",
+                    "category": "Mandatory Access Control",
+                    "title": "Ensure AppArmor or SELinux is installed, enabled, and in enforcing mode",
+                    "collector_type": "linux_mac_status",
+                    "target": "/sys/kernel/security/apparmor",
+                    "raw_value": {"value": "disabled"},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-3.3.1",
+                    "category": "Kernel Network Hardening",
+                    "title": "Ensure source routed packets are not accepted",
+                    "collector_type": "linux_proc_sysctl",
+                    "target": "net.ipv4.conf.*.accept_source_route",
+                    "raw_value": {"values": {"net.ipv4.conf.all.accept_source_route": 1, "net.ipv4.conf.default.accept_source_route": 1}},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-3.3.2",
+                    "category": "Kernel Network Hardening",
+                    "title": "Ensure TCP SYN Cookies are enabled",
+                    "collector_type": "linux_proc_sysctl",
+                    "target": "net.ipv4.tcp_syncookies",
+                    "raw_value": {"value": 0},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-5.4.1.1",
+                    "category": "Password & Account Policies",
+                    "title": "Ensure password hashing algorithm is SHA-512 or YESCRYPT",
+                    "collector_type": "linux_login_defs",
+                    "target": "/etc/login.defs::ENCRYPT_METHOD",
+                    "raw_value": {"value": "MD5"},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-5.2.10",
+                    "category": "SSH Hardening",
+                    "title": "Ensure SSH password authentication is disabled",
+                    "collector_type": "linux_sshd_effective_config",
+                    "target": "/etc/ssh/sshd_config::PasswordAuthentication",
+                    "raw_value": {"value": "yes"},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-1.7.1",
+                    "category": "Kernel Memory Protection",
+                    "title": "Ensure core dumps of SUID programs are restricted",
+                    "collector_type": "linux_proc_sysctl",
+                    "target": "fs.suid_dumpable",
+                    "raw_value": {"value": 1},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-5.1.1",
+                    "category": "Filesystem Integrity & Permissions",
+                    "title": "Ensure permissions on /etc/crontab are configured",
+                    "collector_type": "linux_file_stat",
+                    "target": "/etc/crontab",
+                    "raw_value": {"uid": 0, "owner": "root", "group": "root", "mode_octal": "0644"},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-3.2.2",
+                    "category": "Kernel Network Hardening",
+                    "title": "Ensure ICMP broadcast echo requests are ignored",
+                    "collector_type": "linux_proc_sysctl",
+                    "target": "net.ipv4.icmp_echo_ignore_broadcasts",
+                    "raw_value": {"value": 0},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-3.2.4",
+                    "category": "Kernel Network Hardening",
+                    "title": "Ensure suspicious packets (Martians) are logged",
+                    "collector_type": "linux_proc_sysctl",
+                    "target": "net.ipv4.conf.*.log_martians",
+                    "raw_value": {"values": {"net.ipv4.conf.all.log_martians": 0, "net.ipv4.conf.default.log_martians": 0}},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "LNX-CIS-5.4.4",
+                    "category": "Filesystem Integrity & Permissions",
+                    "title": "Ensure default user umask is 027 or more restrictive",
+                    "collector_type": "linux_login_defs",
+                    "target": "/etc/login.defs::UMASK",
+                    "raw_value": {"value": "022"},
                     "collected_at": now_iso,
                     "status": "COLLECTED",
                 },
@@ -619,7 +819,7 @@ def seed_enterprise_fleet_if_empty(include_demo: bool = False) -> None:
                     "category": "Hardware & Boot Integrity",
                     "title": "Ensure UEFI Secure Boot is enabled",
                     "collector_type": "windows_registry",
-                    "target": "HKLM\\SYSTEM\\CurrentControlSet\\Control\SecureBoot\\State\\UEFISecureBootEnabled",
+                    "target": "HKLM\\SYSTEM\\CurrentControlSet\\Control\\SecureBoot\\State\\UEFISecureBootEnabled",
                     "raw_value": {"value": 1, "reg_type": 4},
                     "collected_at": now_iso,
                     "status": "COLLECTED",
@@ -631,6 +831,106 @@ def seed_enterprise_fleet_if_empty(include_demo: bool = False) -> None:
                     "collector_type": "network_listening_ports",
                     "target": "TCP::[21,23,69,513,514]",
                     "raw_value": {"value": 0, "exposed_ports": []},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-18.9.30.2",
+                    "category": "Network Protocol Hardening",
+                    "title": "Ensure 'Turn off multicast name resolution' (LLMNR) is set to 'Enabled'",
+                    "collector_type": "windows_registry",
+                    "target": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient\\EnableMulticast",
+                    "raw_value": {"value": 0, "reg_type": 4},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-2.3.7.4",
+                    "category": "Network Security",
+                    "title": "Ensure 'Microsoft network client: Digitally sign communications (always)' is set to 'Enabled'",
+                    "collector_type": "windows_registry",
+                    "target": "HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanWorkstation\\Parameters\\RequireSecuritySignature",
+                    "raw_value": {"value": 1, "reg_type": 4},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-18.9.5.1",
+                    "category": "Endpoint Protection & Antivirus",
+                    "title": "Ensure 'Windows Defender Antivirus: Real-time Protection' is Enabled",
+                    "collector_type": "windows_registry",
+                    "target": "HKLM\\SOFTWARE\\Microsoft\\Windows Defender\\Real-Time Protection\\DisableRealtimeMonitoring",
+                    "raw_value": {"value": 0, "reg_type": 4},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-18.8.19.2",
+                    "category": "Credential Protection",
+                    "title": "Ensure 'Do not allow passwords to be saved' in Remote Desktop Connection is Enabled",
+                    "collector_type": "windows_registry",
+                    "target": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services\\DisablePasswordSaving",
+                    "raw_value": {"value": 1, "reg_type": 4},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-18.5.11.2",
+                    "category": "Removable Media & Peripherals",
+                    "title": "Ensure 'Turn off Autoplay' is set to 'Enabled: All drives'",
+                    "collector_type": "windows_registry",
+                    "target": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\\NoDriveTypeAutoRun",
+                    "raw_value": {"value": 255, "reg_type": 4},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-18.9.15.1",
+                    "category": "Data-at-Rest & Encryption",
+                    "title": "Ensure BitLocker Drive Encryption protection is active on System Volume (C:)",
+                    "collector_type": "windows_bitlocker_status",
+                    "target": "Volume::C:\\manage-bde",
+                    "raw_value": {"value": 1, "protection_active": True},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-2.3.1.5",
+                    "category": "Password & Account Policies",
+                    "title": "Ensure 'Accounts: Administrator account status' is set to 'Disabled' or renamed",
+                    "collector_type": "windows_sam_admin_status",
+                    "target": "Win32API::NetUserGetInfo(Administrator)",
+                    "raw_value": {"value": 0, "is_disabled": True},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-18.9.84.1",
+                    "category": "Remote Management & WinRM",
+                    "title": "Ensure Windows Remote Management (WinRM) Basic Authentication is disabled",
+                    "collector_type": "windows_registry",
+                    "target": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Client\\AllowBasic",
+                    "raw_value": {"value": 0, "reg_type": 4},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-18.9.102.3",
+                    "category": "Session Management & Screen Lock",
+                    "title": "Ensure 'Machine inactivity limit' is set to 900 or fewer seconds",
+                    "collector_type": "windows_registry",
+                    "target": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\\InactivityTimeoutSecs",
+                    "raw_value": {"value": 900, "reg_type": 4},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-18.4.1",
+                    "category": "Cryptography & PKI",
+                    "title": "Ensure 'Strong private key protection for stored certificates' is enforced",
+                    "collector_type": "windows_registry",
+                    "target": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Cryptography\\ForceKeyProtection",
+                    "raw_value": {"value": 2, "reg_type": 4},
                     "collected_at": now_iso,
                     "status": "COLLECTED",
                 },
@@ -750,7 +1050,7 @@ def seed_enterprise_fleet_if_empty(include_demo: bool = False) -> None:
                     "category": "Hardware & Boot Integrity",
                     "title": "Ensure UEFI Secure Boot is enabled",
                     "collector_type": "windows_registry",
-                    "target": "HKLM\\SYSTEM\\CurrentControlSet\\Control\SecureBoot\\State\\UEFISecureBootEnabled",
+                    "target": "HKLM\\SYSTEM\\CurrentControlSet\\Control\\SecureBoot\\State\\UEFISecureBootEnabled",
                     "raw_value": {"value": 0, "reg_type": 4},
                     "collected_at": now_iso,
                     "status": "COLLECTED",
@@ -762,6 +1062,106 @@ def seed_enterprise_fleet_if_empty(include_demo: bool = False) -> None:
                     "collector_type": "network_listening_ports",
                     "target": "TCP::[21,23,69,513,514]",
                     "raw_value": {"value": 1, "exposed_ports": [23]},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-18.9.30.2",
+                    "category": "Network Protocol Hardening",
+                    "title": "Ensure 'Turn off multicast name resolution' (LLMNR) is set to 'Enabled'",
+                    "collector_type": "windows_registry",
+                    "target": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient\\EnableMulticast",
+                    "raw_value": {"value": 1, "reg_type": 4},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-2.3.7.4",
+                    "category": "Network Security",
+                    "title": "Ensure 'Microsoft network client: Digitally sign communications (always)' is set to 'Enabled'",
+                    "collector_type": "windows_registry",
+                    "target": "HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanWorkstation\\Parameters\\RequireSecuritySignature",
+                    "raw_value": {"value": 0, "reg_type": 4},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-18.9.5.1",
+                    "category": "Endpoint Protection & Antivirus",
+                    "title": "Ensure 'Windows Defender Antivirus: Real-time Protection' is Enabled",
+                    "collector_type": "windows_registry",
+                    "target": "HKLM\\SOFTWARE\\Microsoft\\Windows Defender\\Real-Time Protection\\DisableRealtimeMonitoring",
+                    "raw_value": {"value": 1, "reg_type": 4},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-18.8.19.2",
+                    "category": "Credential Protection",
+                    "title": "Ensure 'Do not allow passwords to be saved' in Remote Desktop Connection is Enabled",
+                    "collector_type": "windows_registry",
+                    "target": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services\\DisablePasswordSaving",
+                    "raw_value": {"value": 0, "reg_type": 4},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-18.5.11.2",
+                    "category": "Removable Media & Peripherals",
+                    "title": "Ensure 'Turn off Autoplay' is set to 'Enabled: All drives'",
+                    "collector_type": "windows_registry",
+                    "target": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\\NoDriveTypeAutoRun",
+                    "raw_value": {"value": 145, "reg_type": 4},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-18.9.15.1",
+                    "category": "Data-at-Rest & Encryption",
+                    "title": "Ensure BitLocker Drive Encryption protection is active on System Volume (C:)",
+                    "collector_type": "windows_bitlocker_status",
+                    "target": "Volume::C:\\manage-bde",
+                    "raw_value": {"value": 0, "protection_active": False},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-2.3.1.5",
+                    "category": "Password & Account Policies",
+                    "title": "Ensure 'Accounts: Administrator account status' is set to 'Disabled' or renamed",
+                    "collector_type": "windows_sam_admin_status",
+                    "target": "Win32API::NetUserGetInfo(Administrator)",
+                    "raw_value": {"value": 1, "is_disabled": False},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-18.9.84.1",
+                    "category": "Remote Management & WinRM",
+                    "title": "Ensure Windows Remote Management (WinRM) Basic Authentication is disabled",
+                    "collector_type": "windows_registry",
+                    "target": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Client\\AllowBasic",
+                    "raw_value": {"value": 1, "reg_type": 4},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-18.9.102.3",
+                    "category": "Session Management & Screen Lock",
+                    "title": "Ensure 'Machine inactivity limit' is set to 900 or fewer seconds",
+                    "collector_type": "windows_registry",
+                    "target": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\\InactivityTimeoutSecs",
+                    "raw_value": {"value": 0, "reg_type": 4},
+                    "collected_at": now_iso,
+                    "status": "COLLECTED",
+                },
+                {
+                    "check_id": "WIN-CIS-18.4.1",
+                    "category": "Cryptography & PKI",
+                    "title": "Ensure 'Strong private key protection for stored certificates' is enforced",
+                    "collector_type": "windows_registry",
+                    "target": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Cryptography\\ForceKeyProtection",
+                    "raw_value": {"value": 0, "reg_type": 4},
                     "collected_at": now_iso,
                     "status": "COLLECTED",
                 },
@@ -2179,6 +2579,132 @@ WINDOWS_REMEDIATION_TEMPLATES: Dict[str, Dict[str, str]] = {
             "    enabled: yes"
         ),
     },
+    "WIN-CIS-18.9.30.2": {
+        "backup": r'reg export "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient" "$BackupDir\WIN-CIS-18.9.30.2.reg" /y 2>$null',
+        "apply": (
+            'New-Item -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient" -Force | Out-Null\n'
+            'Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient" -Name "EnableMulticast" -Value 0 -Type DWord -Force'
+        ),
+        "ansible": (
+            "- name: '[WIN-CIS-18.9.30.2] Disable LLMNR Multicast Name Resolution'\n"
+            "  ansible.windows.win_regedit:\n"
+            "    path: HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient\n"
+            "    name: EnableMulticast\n"
+            "    data: 0\n"
+            "    type: dword"
+        ),
+    },
+    "WIN-CIS-2.3.7.4": {
+        "backup": r'reg export "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" "$BackupDir\WIN-CIS-2.3.7.4.reg" /y 2>$null',
+        "apply": 'Set-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\LanmanWorkstation\\Parameters" -Name "RequireSecuritySignature" -Value 1 -Type DWord -Force',
+        "ansible": (
+            "- name: '[WIN-CIS-2.3.7.4] Require SMB Client Digitally Signed Communications'\n"
+            "  ansible.windows.win_regedit:\n"
+            "    path: HKLM:\\SYSTEM\\CurrentControlSet\\Services\\LanmanWorkstation\\Parameters\n"
+            "    name: RequireSecuritySignature\n"
+            "    data: 1\n"
+            "    type: dword"
+        ),
+    },
+    "WIN-CIS-18.9.5.1": {
+        "backup": r'reg export "HKLM\SOFTWARE\Microsoft\Windows Defender\Real-Time Protection" "$BackupDir\WIN-CIS-18.9.5.1.reg" /y 2>$null',
+        "apply": 'Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue; Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows Defender\\Real-Time Protection" -Name "DisableRealtimeMonitoring" -Value 0 -Type DWord -Force',
+        "ansible": (
+            "- name: '[WIN-CIS-18.9.5.1] Enable Windows Defender Real-time Protection'\n"
+            "  ansible.windows.win_powershell:\n"
+            "    script: Set-MpPreference -DisableRealtimeMonitoring $false"
+        ),
+    },
+    "WIN-CIS-18.8.19.2": {
+        "backup": r'reg export "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" "$BackupDir\WIN-CIS-18.8.19.2.reg" /y 2>$null',
+        "apply": (
+            'New-Item -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services" -Force | Out-Null\n'
+            'Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services" -Name "DisablePasswordSaving" -Value 1 -Type DWord -Force'
+        ),
+        "ansible": (
+            "- name: '[WIN-CIS-18.8.19.2] Do Not Allow RDP Passwords to Be Saved'\n"
+            "  ansible.windows.win_regedit:\n"
+            "    path: HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services\n"
+            "    name: DisablePasswordSaving\n"
+            "    data: 1\n"
+            "    type: dword"
+        ),
+    },
+    "WIN-CIS-18.5.11.2": {
+        "backup": r'reg export "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" "$BackupDir\WIN-CIS-18.5.11.2.reg" /y 2>$null',
+        "apply": 'Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer" -Name "NoDriveTypeAutoRun" -Value 255 -Type DWord -Force',
+        "ansible": (
+            "- name: '[WIN-CIS-18.5.11.2] Turn Off Autoplay on All Drives'\n"
+            "  ansible.windows.win_regedit:\n"
+            "    path: HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\n"
+            "    name: NoDriveTypeAutoRun\n"
+            "    data: 255\n"
+            "    type: dword"
+        ),
+    },
+    "WIN-CIS-18.9.15.1": {
+        "backup": 'manage-bde.exe -status C: > "$BackupDir\\WIN-CIS-18.9.15.1-status.txt"',
+        "apply": 'Enable-BitLocker -MountPoint "C:" -EncryptionMethod XtsAes256 -UsedSpaceOnly -TpmProtector -ErrorAction SilentlyContinue',
+        "ansible": (
+            "- name: '[WIN-CIS-18.9.15.1] Enable BitLocker on System Volume C:'\n"
+            "  ansible.windows.win_powershell:\n"
+            "    script: Enable-BitLocker -MountPoint 'C:' -EncryptionMethod XtsAes256 -UsedSpaceOnly -TpmProtector"
+        ),
+    },
+    "WIN-CIS-2.3.1.5": {
+        "backup": 'Get-LocalUser -Name "Administrator" -ErrorAction SilentlyContinue | Select-Object Name,Enabled | ConvertTo-Json > "$BackupDir\\WIN-CIS-2.3.1.5.json"',
+        "apply": 'Disable-LocalUser -Name "Administrator" -ErrorAction SilentlyContinue; net user Administrator /active:no 2>$null',
+        "ansible": (
+            "- name: '[WIN-CIS-2.3.1.5] Ensure Built-in Administrator Account is Disabled'\n"
+            "  ansible.windows.win_user:\n"
+            "    name: Administrator\n"
+            "    account_disabled: true"
+        ),
+    },
+    "WIN-CIS-18.9.84.1": {
+        "backup": r'reg export "HKLM\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client" "$BackupDir\WIN-CIS-18.9.84.1.reg" /y 2>$null',
+        "apply": (
+            'New-Item -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Client" -Force | Out-Null\n'
+            'Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Client" -Name "AllowBasic" -Value 0 -Type DWord -Force\n'
+            'New-Item -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service" -Force | Out-Null\n'
+            'Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service" -Name "AllowBasic" -Value 0 -Type DWord -Force'
+        ),
+        "ansible": (
+            "- name: '[WIN-CIS-18.9.84.1] Disable WinRM Basic Authentication'\n"
+            "  ansible.windows.win_regedit:\n"
+            "    path: HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Client\n"
+            "    name: AllowBasic\n"
+            "    data: 0\n"
+            "    type: dword"
+        ),
+    },
+    "WIN-CIS-18.9.102.3": {
+        "backup": r'reg export "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" "$BackupDir\WIN-CIS-18.9.102.3.reg" /y 2>$null',
+        "apply": 'Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System" -Name "InactivityTimeoutSecs" -Value 900 -Type DWord -Force',
+        "ansible": (
+            "- name: '[WIN-CIS-18.9.102.3] Set Machine Inactivity Limit to 900s (15 min)'\n"
+            "  ansible.windows.win_regedit:\n"
+            "    path: HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\n"
+            "    name: InactivityTimeoutSecs\n"
+            "    data: 900\n"
+            "    type: dword"
+        ),
+    },
+    "WIN-CIS-18.4.1": {
+        "backup": r'reg export "HKLM\SOFTWARE\Policies\Microsoft\Cryptography" "$BackupDir\WIN-CIS-18.4.1.reg" /y 2>$null',
+        "apply": (
+            'New-Item -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Cryptography" -Force | Out-Null\n'
+            'Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Cryptography" -Name "ForceKeyProtection" -Value 2 -Type DWord -Force'
+        ),
+        "ansible": (
+            "- name: '[WIN-CIS-18.4.1] Enforce Strong Private Key Protection for Stored Certificates'\n"
+            "  ansible.windows.win_regedit:\n"
+            "    path: HKLM:\\SOFTWARE\\Policies\\Microsoft\\Cryptography\n"
+            "    name: ForceKeyProtection\n"
+            "    data: 2\n"
+            "    type: dword"
+        ),
+    },
 }
 
 LINUX_REMEDIATION_TEMPLATES: Dict[str, Dict[str, str]] = {
@@ -2312,6 +2838,154 @@ LINUX_REMEDIATION_TEMPLATES: Dict[str, Dict[str, str]] = {
             "    enabled: false\n"
             "  failed_when: false\n"
             "  loop: [telnet.socket, vsftpd.service, rsh.socket]"
+        ),
+    },
+    "LNX-CIS-1.6.1": {
+        "backup": 'aa-status > "$BACKUP_DIR/LNX-CIS-1.6.1.status" 2>/dev/null || true',
+        "apply": "systemctl enable --now apparmor 2>/dev/null || true; aa-enforce /etc/apparmor.d/* 2>/dev/null || true",
+        "ansible": (
+            "- name: '[LNX-CIS-1.6.1] Ensure AppArmor is Enabled and Active'\n"
+            "  ansible.builtin.service:\n"
+            "    name: apparmor\n"
+            "    state: started\n"
+            "    enabled: true"
+        ),
+    },
+    "LNX-CIS-3.3.1": {
+        "backup": 'sysctl net.ipv4.conf.all.accept_source_route net.ipv4.conf.default.accept_source_route > "$BACKUP_DIR/LNX-CIS-3.3.1.sysctl"',
+        "apply": (
+            'printf "net.ipv4.conf.all.accept_source_route = 0\\nnet.ipv4.conf.default.accept_source_route = 0\\n" > /etc/sysctl.d/60-cis-source-route.conf\n'
+            "sysctl -w net.ipv4.conf.all.accept_source_route=0 net.ipv4.conf.default.accept_source_route=0"
+        ),
+        "ansible": (
+            "- name: '[LNX-CIS-3.3.1] Disable IP Source Routed Packets'\n"
+            "  ansible.posix.sysctl:\n"
+            "    name: '{{ item }}'\n"
+            "    value: '0'\n"
+            "    state: present\n"
+            "    reload: true\n"
+            "  loop:\n"
+            "    - net.ipv4.conf.all.accept_source_route\n"
+            "    - net.ipv4.conf.default.accept_source_route"
+        ),
+    },
+    "LNX-CIS-3.3.2": {
+        "backup": 'sysctl net.ipv4.tcp_syncookies > "$BACKUP_DIR/LNX-CIS-3.3.2.sysctl"',
+        "apply": (
+            'echo "net.ipv4.tcp_syncookies = 1" > /etc/sysctl.d/60-cis-syncookies.conf\n'
+            "sysctl -w net.ipv4.tcp_syncookies=1"
+        ),
+        "ansible": (
+            "- name: '[LNX-CIS-3.3.2] Enable TCP SYN Cookies'\n"
+            "  ansible.posix.sysctl:\n"
+            "    name: net.ipv4.tcp_syncookies\n"
+            "    value: '1'\n"
+            "    state: present\n"
+            "    reload: true"
+        ),
+    },
+    "LNX-CIS-5.4.1.1": {
+        "backup": 'cp -p /etc/login.defs "$BACKUP_DIR/login.defs.bak"',
+        "apply": (
+            'sed -i -E "s/^#?ENCRYPT_METHOD.*/ENCRYPT_METHOD YESCRYPT/" /etc/login.defs\n'
+            'grep -q "^ENCRYPT_METHOD YESCRYPT" /etc/login.defs || echo "ENCRYPT_METHOD YESCRYPT" >> /etc/login.defs'
+        ),
+        "ansible": (
+            "- name: '[LNX-CIS-5.4.1.1] Set Password Hashing Algorithm to YESCRYPT in /etc/login.defs'\n"
+            "  ansible.builtin.lineinfile:\n"
+            "    path: /etc/login.defs\n"
+            "    regexp: '^#?ENCRYPT_METHOD'\n"
+            "    line: 'ENCRYPT_METHOD YESCRYPT'"
+        ),
+    },
+    "LNX-CIS-5.2.10": {
+        "backup": 'cp -p /etc/ssh/sshd_config "$BACKUP_DIR/sshd_config.bak" 2>/dev/null || true',
+        "apply": (
+            'sed -i -E "s/^#?PasswordAuthentication.*/PasswordAuthentication no/" /etc/ssh/sshd_config\n'
+            'grep -q "^PasswordAuthentication no" /etc/ssh/sshd_config || echo "PasswordAuthentication no" >> /etc/ssh/sshd_config\n'
+            "systemctl reload sshd 2>/dev/null || true"
+        ),
+        "ansible": (
+            "- name: '[LNX-CIS-5.2.10] Disable SSH Password Authentication'\n"
+            "  ansible.builtin.lineinfile:\n"
+            "    path: /etc/ssh/sshd_config\n"
+            "    regexp: '^#?PasswordAuthentication'\n"
+            "    line: 'PasswordAuthentication no'\n"
+            "    validate: 'sshd -t -f %s'"
+        ),
+    },
+    "LNX-CIS-1.7.1": {
+        "backup": 'sysctl fs.suid_dumpable > "$BACKUP_DIR/LNX-CIS-1.7.1.sysctl"',
+        "apply": (
+            'echo "fs.suid_dumpable = 0" > /etc/sysctl.d/60-cis-suiddump.conf\n'
+            "sysctl -w fs.suid_dumpable=0"
+        ),
+        "ansible": (
+            "- name: '[LNX-CIS-1.7.1] Restrict Core Dumps of SUID Programs (fs.suid_dumpable = 0)'\n"
+            "  ansible.posix.sysctl:\n"
+            "    name: fs.suid_dumpable\n"
+            "    value: '0'\n"
+            "    state: present\n"
+            "    reload: true"
+        ),
+    },
+    "LNX-CIS-5.1.1": {
+        "backup": 'stat -c "%a %U:%G" /etc/crontab > "$BACKUP_DIR/LNX-CIS-5.1.1.stat" 2>/dev/null || true',
+        "apply": "chown root:root /etc/crontab && chmod 0600 /etc/crontab",
+        "ansible": (
+            "- name: '[LNX-CIS-5.1.1] Harden /etc/crontab Permissions (0600 root:root)'\n"
+            "  ansible.builtin.file:\n"
+            "    path: /etc/crontab\n"
+            "    owner: root\n"
+            "    group: root\n"
+            "    mode: '0600'"
+        ),
+    },
+    "LNX-CIS-3.2.2": {
+        "backup": 'sysctl net.ipv4.icmp_echo_ignore_broadcasts > "$BACKUP_DIR/LNX-CIS-3.2.2.sysctl"',
+        "apply": (
+            'echo "net.ipv4.icmp_echo_ignore_broadcasts = 1" > /etc/sysctl.d/60-cis-broadcasts.conf\n'
+            "sysctl -w net.ipv4.icmp_echo_ignore_broadcasts=1"
+        ),
+        "ansible": (
+            "- name: '[LNX-CIS-3.2.2] Ignore ICMP Broadcast Echo Requests (Smurf Protection)'\n"
+            "  ansible.posix.sysctl:\n"
+            "    name: net.ipv4.icmp_echo_ignore_broadcasts\n"
+            "    value: '1'\n"
+            "    state: present\n"
+            "    reload: true"
+        ),
+    },
+    "LNX-CIS-3.2.4": {
+        "backup": 'sysctl net.ipv4.conf.all.log_martians net.ipv4.conf.default.log_martians > "$BACKUP_DIR/LNX-CIS-3.2.4.sysctl"',
+        "apply": (
+            'printf "net.ipv4.conf.all.log_martians = 1\\nnet.ipv4.conf.default.log_martians = 1\\n" > /etc/sysctl.d/60-cis-martians.conf\n'
+            "sysctl -w net.ipv4.conf.all.log_martians=1 net.ipv4.conf.default.log_martians=1"
+        ),
+        "ansible": (
+            "- name: '[LNX-CIS-3.2.4] Log Suspicious Packets (Martians)'\n"
+            "  ansible.posix.sysctl:\n"
+            "    name: '{{ item }}'\n"
+            "    value: '1'\n"
+            "    state: present\n"
+            "    reload: true\n"
+            "  loop:\n"
+            "    - net.ipv4.conf.all.log_martians\n"
+            "    - net.ipv4.conf.default.log_martians"
+        ),
+    },
+    "LNX-CIS-5.4.4": {
+        "backup": 'cp -p /etc/login.defs "$BACKUP_DIR/login.defs.bak"',
+        "apply": (
+            'sed -i -E "s/^#?UMASK.*/UMASK 027/" /etc/login.defs\n'
+            'grep -q "^UMASK 027" /etc/login.defs || echo "UMASK 027" >> /etc/login.defs'
+        ),
+        "ansible": (
+            "- name: '[LNX-CIS-5.4.4] Enforce Default umask 027 in /etc/login.defs'\n"
+            "  ansible.builtin.lineinfile:\n"
+            "    path: /etc/login.defs\n"
+            "    regexp: '^#?UMASK'\n"
+            "    line: 'UMASK 027'"
         ),
     },
 }

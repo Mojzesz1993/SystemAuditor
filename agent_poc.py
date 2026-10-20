@@ -126,7 +126,7 @@ class OSParameterCollector:
         return "boot-session-default"
 
     def collect_security_parameters(self, full_suite: bool = True) -> List[AuditMeasurement]:
-        """Pobiera zestaw parametrów bezpieczeństwa CIS dla wykrytego systemu OS."""
+        """Pobiera zestaw parametrów bezpieczeństwa CIS dla wykrytego systemu OS (22 reguły Windows / 20 reguł Linux)."""
         if self.os_family == "windows":
             core = [
                 self._collect_windows_smbv1_status(),
@@ -145,6 +145,17 @@ class OSParameterCollector:
                 self._collect_windows_rdp_nla_status(),
                 self._collect_windows_uefi_secureboot(),
                 self._collect_windows_risky_listening_ports(),
+                # Nowe reguły natywne CIS Windows Enterprise (Rozszerzenie do 22 reguł)
+                self._collect_windows_llmnr_status(),
+                self._collect_windows_smb_client_signing(),
+                self._collect_windows_defender_realtime(),
+                self._collect_windows_rdp_saved_passwords(),
+                self._collect_windows_autorun_disabled(),
+                self._collect_windows_bitlocker_c_status(),
+                self._collect_windows_admin_account_status(),
+                self._collect_windows_winrm_basic_auth(),
+                self._collect_windows_inactivity_timeout(),
+                self._collect_windows_cert_force_key_protection(),
             ]
         elif self.os_family == "linux":
             core = [
@@ -162,6 +173,17 @@ class OSParameterCollector:
                 self._collect_linux_sudoers_nopasswd(),
                 self._collect_linux_grub_permissions(),
                 self._collect_linux_risky_listening_ports(),
+                # Nowe reguły natywne CIS Linux Enterprise (Rozszerzenie do 20 reguł)
+                self._collect_linux_mac_status(),
+                self._collect_linux_ip_source_route(),
+                self._collect_linux_tcp_syncookies(),
+                self._collect_linux_login_defs_encrypt_method(),
+                self._collect_linux_sshd_password_auth(),
+                self._collect_linux_suid_dumpable(),
+                self._collect_linux_crontab_permissions(),
+                self._collect_linux_icmp_echo_ignore_broadcasts(),
+                self._collect_linux_log_martians(),
+                self._collect_linux_login_defs_umask(),
             ]
         else:
             raise NotImplementedError(f"Nieobsługiwany system operacyjny: {self.os_family}")
@@ -481,6 +503,182 @@ class OSParameterCollector:
                 status="ERROR",
                 error_message=str(exc),
             )
+
+    def _collect_windows_llmnr_status(self) -> AuditMeasurement:
+        """WIN-CIS-18.9.30.2: Weryfikacja wyłączenia multicastu LLMNR."""
+        return self._read_hklm_dword(
+            check_id="WIN-CIS-18.9.30.2",
+            category="Network Protocol Hardening",
+            title="Ensure 'Turn off multicast name resolution' (LLMNR) is set to 'Enabled'",
+            reg_path=r"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient",
+            value_name="EnableMulticast",
+        )
+
+    def _collect_windows_smb_client_signing(self) -> AuditMeasurement:
+        """WIN-CIS-2.3.7.4: Wymuszenie podpisywania cyfrowego SMB przez klienta."""
+        return self._read_hklm_dword(
+            check_id="WIN-CIS-2.3.7.4",
+            category="Network Security",
+            title="Ensure 'Microsoft network client: Digitally sign communications (always)' is set to 'Enabled'",
+            reg_path=r"SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters",
+            value_name="RequireSecuritySignature",
+        )
+
+    def _collect_windows_defender_realtime(self) -> AuditMeasurement:
+        """WIN-CIS-18.9.5.1: Weryfikacja ochrony w czasie rzeczywistym Windows Defender."""
+        return self._read_hklm_dword(
+            check_id="WIN-CIS-18.9.5.1",
+            category="Endpoint Protection & Antivirus",
+            title="Ensure 'Windows Defender Antivirus: Real-time Protection' is Enabled",
+            reg_path=r"SOFTWARE\Microsoft\Windows Defender\Real-Time Protection",
+            value_name="DisableRealtimeMonitoring",
+        )
+
+    def _collect_windows_rdp_saved_passwords(self) -> AuditMeasurement:
+        """WIN-CIS-18.8.19.2: Blokada zapisywania haseł RDP w kliencie."""
+        return self._read_hklm_dword(
+            check_id="WIN-CIS-18.8.19.2",
+            category="Credential Protection",
+            title="Ensure 'Do not allow passwords to be saved' in Remote Desktop Connection is Enabled",
+            reg_path=r"SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services",
+            value_name="DisablePasswordSaving",
+        )
+
+    def _collect_windows_autorun_disabled(self) -> AuditMeasurement:
+        """WIN-CIS-18.5.11.2: Wyłączenie autoodtwarzania dysków wymiennych."""
+        return self._read_hklm_dword(
+            check_id="WIN-CIS-18.5.11.2",
+            category="Removable Media & Peripherals",
+            title="Ensure 'Turn off Autoplay' is set to 'Enabled: All drives'",
+            reg_path=r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer",
+            value_name="NoDriveTypeAutoRun",
+        )
+
+    def _collect_windows_bitlocker_c_status(self) -> AuditMeasurement:
+        """WIN-CIS-18.9.15.1: Weryfikacja szyfrowania BitLocker na woluminie systemowym C:"""
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        try:
+            proc = subprocess.run(
+                ["manage-bde.exe", "-status", "C:"],
+                shell=False,
+                capture_output=True,
+                text=True,
+                timeout=6,
+                check=False,
+            )
+            out = (proc.stdout or "").lower()
+            is_on = "protection on" in out or "ochrona włączona" in out or "ochrona wlaczona" in out
+            return AuditMeasurement(
+                check_id="WIN-CIS-18.9.15.1",
+                category="Data-at-Rest & Encryption",
+                title="Ensure BitLocker Drive Encryption protection is active on System Volume (C:)",
+                collector_type="windows_bitlocker_status",
+                target="Volume::C:\\manage-bde",
+                raw_value={"value": 1 if is_on else 0, "protection_active": is_on, "details": (proc.stdout or "").strip()[:160]},
+                collected_at=now,
+                status="COLLECTED",
+            )
+        except Exception as exc:
+            return AuditMeasurement(
+                check_id="WIN-CIS-18.9.15.1",
+                category="Data-at-Rest & Encryption",
+                title="Ensure BitLocker Drive Encryption protection is active on System Volume (C:)",
+                collector_type="windows_bitlocker_status",
+                target="Volume::C:\\manage-bde",
+                raw_value={"value": 0, "error": str(exc)},
+                collected_at=now,
+                status="COLLECTED",
+            )
+
+    def _collect_windows_admin_account_status(self) -> AuditMeasurement:
+        """WIN-CIS-2.3.1.5: Weryfikacja blokady wbudowanego konta Administrator (NetUserGetInfo)."""
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        target_str = "Win32API::NetUserGetInfo(Administrator, level=1)->usri1_flags"
+
+        class USER_INFO_1(ctypes.Structure):
+            _fields_ = [
+                ("usri1_name", ctypes.c_wchar_p),
+                ("usri1_password", ctypes.c_wchar_p),
+                ("usri1_password_age", ctypes.c_uint32),
+                ("usri1_priv", ctypes.c_uint32),
+                ("usri1_home_dir", ctypes.c_wchar_p),
+                ("usri1_comment", ctypes.c_wchar_p),
+                ("usri1_flags", ctypes.c_uint32),
+                ("usri1_script_path", ctypes.c_wchar_p),
+            ]
+
+        UF_ACCOUNTDISABLE = 0x0002
+        try:
+            netapi32 = ctypes.windll.netapi32
+            for candidate_name in ("Administrator", "administrator"):
+                buf_ptr = ctypes.POINTER(USER_INFO_1)()
+                status = netapi32.NetUserGetInfo(None, candidate_name, 1, ctypes.byref(buf_ptr))
+                if status == 0 and buf_ptr:
+                    flags = int(buf_ptr.contents.usri1_flags)
+                    netapi32.NetApiBufferFree(buf_ptr)
+                    is_disabled = bool(flags & UF_ACCOUNTDISABLE)
+                    return AuditMeasurement(
+                        check_id="WIN-CIS-2.3.1.5",
+                        category="Password & Account Policies",
+                        title="Ensure 'Accounts: Administrator account status' is set to 'Disabled' or renamed",
+                        collector_type="windows_sam_admin_status",
+                        target=target_str,
+                        raw_value={"value": 0 if is_disabled else 1, "is_disabled": is_disabled, "account_name": candidate_name},
+                        collected_at=now,
+                        status="COLLECTED",
+                    )
+            return AuditMeasurement(
+                check_id="WIN-CIS-2.3.1.5",
+                category="Password & Account Policies",
+                title="Ensure 'Accounts: Administrator account status' is set to 'Disabled' or renamed",
+                collector_type="windows_sam_admin_status",
+                target=target_str,
+                raw_value={"value": 0, "is_renamed_or_missing": True},
+                collected_at=now,
+                status="COLLECTED",
+            )
+        except Exception as exc:
+            return AuditMeasurement(
+                check_id="WIN-CIS-2.3.1.5",
+                category="Password & Account Policies",
+                title="Ensure 'Accounts: Administrator account status' is set to 'Disabled' or renamed",
+                collector_type="windows_sam_admin_status",
+                target=target_str,
+                raw_value=None,
+                collected_at=now,
+                status="ERROR",
+                error_message=str(exc),
+            )
+
+    def _collect_windows_winrm_basic_auth(self) -> AuditMeasurement:
+        """WIN-CIS-18.9.84.1: Blokada uwierzytelniania podstawowego w WinRM."""
+        return self._read_hklm_dword(
+            check_id="WIN-CIS-18.9.84.1",
+            category="Remote Management & WinRM",
+            title="Ensure Windows Remote Management (WinRM) Basic Authentication is disabled",
+            reg_path=r"SOFTWARE\Policies\Microsoft\Windows\WinRM\Client",
+            value_name="AllowBasic",
+        )
+
+    def _collect_windows_inactivity_timeout(self) -> AuditMeasurement:
+        """WIN-CIS-18.9.102.3: Limit braku aktywności stacji (blokada ekranu)."""
+        return self._read_hklm_dword(
+            check_id="WIN-CIS-18.9.102.3",
+            category="Session Management & Screen Lock",
+            title="Ensure 'Machine inactivity limit' is set to 900 or fewer seconds (Screen Saver Lockout)",
+            reg_path=r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System",
+            value_name="InactivityTimeoutSecs",
+        )
+
+    def _collect_windows_cert_force_key_protection(self) -> AuditMeasurement:
+        """WIN-CIS-18.4.1: Wymuszenie silnej ochrony klucza prywatnego certyfikatów."""
+        return self._read_hklm_dword(
+            check_id="WIN-CIS-18.4.1",
+            category="Cryptography & PKI",
+            title="Ensure 'Strong private key protection for stored certificates' is enforced",
+            reg_path=r"SOFTWARE\Policies\Microsoft\Cryptography",
+            value_name="ForceKeyProtection",
+        )
 
     # -----------------------------------------------------------------
     # KOLEKTORY LINUX (10 Reguł CIS)
@@ -876,6 +1074,390 @@ class OSParameterCollector:
                 title="Ensure no high-risk cleartext TCP ports are listening (Telnet/23, FTP/21, RSH/514, X11/6000)",
                 collector_type="network_listening_ports",
                 target="/proc/net/tcp",
+                raw_value=None,
+                collected_at=now,
+                status="ERROR",
+                error_message=str(exc),
+            )
+
+    def _collect_linux_mac_status(self) -> AuditMeasurement:
+        """LNX-CIS-1.6.1: Weryfikacja aktywności AppArmor lub SELinux."""
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        apparmor_path = Path("/sys/kernel/security/apparmor/profiles")
+        selinux_path = Path("/sys/fs/selinux/enforce")
+        status_val = "disabled"
+        try:
+            if apparmor_path.exists():
+                text = apparmor_path.read_text(encoding="ascii", errors="replace").strip()
+                if text:
+                    status_val = "enforcing"
+            elif selinux_path.exists():
+                text = selinux_path.read_text(encoding="ascii", errors="replace").strip()
+                if text == "1":
+                    status_val = "enforcing"
+            return AuditMeasurement(
+                check_id="LNX-CIS-1.6.1",
+                category="Mandatory Access Control",
+                title="Ensure AppArmor or SELinux is installed, enabled, and in enforcing mode",
+                collector_type="linux_mac_status",
+                target="/sys/kernel/security/apparmor;/sys/fs/selinux",
+                raw_value={"value": status_val},
+                collected_at=now,
+                status="COLLECTED",
+            )
+        except Exception as exc:
+            return AuditMeasurement(
+                check_id="LNX-CIS-1.6.1",
+                category="Mandatory Access Control",
+                title="Ensure AppArmor or SELinux is installed, enabled, and in enforcing mode",
+                collector_type="linux_mac_status",
+                target="/sys/kernel/security/apparmor;/sys/fs/selinux",
+                raw_value=None,
+                collected_at=now,
+                status="ERROR",
+                error_message=str(exc),
+            )
+
+    def _collect_linux_ip_source_route(self) -> AuditMeasurement:
+        """LNX-CIS-3.3.1: Weryfikacja blokady pakietów IP Source Routed."""
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        keys = {
+            "net.ipv4.conf.all.accept_source_route": Path("/proc/sys/net/ipv4/conf/all/accept_source_route"),
+            "net.ipv4.conf.default.accept_source_route": Path("/proc/sys/net/ipv4/conf/default/accept_source_route"),
+        }
+        try:
+            vals = {k: int(p.read_text(encoding="ascii").strip()) for k, p in keys.items()}
+            return AuditMeasurement(
+                check_id="LNX-CIS-3.3.1",
+                category="Kernel Network Hardening",
+                title="Ensure source routed packets are not accepted (accept_source_route = 0)",
+                collector_type="linux_proc_sysctl",
+                target="net.ipv4.conf.*.accept_source_route",
+                raw_value={"values": vals},
+                collected_at=now,
+                status="COLLECTED",
+            )
+        except Exception as exc:
+            return AuditMeasurement(
+                check_id="LNX-CIS-3.3.1",
+                category="Kernel Network Hardening",
+                title="Ensure source routed packets are not accepted (accept_source_route = 0)",
+                collector_type="linux_proc_sysctl",
+                target="net.ipv4.conf.*.accept_source_route",
+                raw_value=None,
+                collected_at=now,
+                status="ERROR",
+                error_message=str(exc),
+            )
+
+    def _collect_linux_tcp_syncookies(self) -> AuditMeasurement:
+        """LNX-CIS-3.3.2: Weryfikacja włączenia TCP SYN Cookies."""
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        p = Path("/proc/sys/net/ipv4/tcp_syncookies")
+        try:
+            val = int(p.read_text(encoding="ascii").strip())
+            return AuditMeasurement(
+                check_id="LNX-CIS-3.3.2",
+                category="Kernel Network Hardening",
+                title="Ensure TCP SYN Cookies are enabled (net.ipv4.tcp_syncookies = 1)",
+                collector_type="linux_proc_sysctl",
+                target="net.ipv4.tcp_syncookies",
+                raw_value={"value": val},
+                collected_at=now,
+                status="COLLECTED",
+            )
+        except Exception as exc:
+            return AuditMeasurement(
+                check_id="LNX-CIS-3.3.2",
+                category="Kernel Network Hardening",
+                title="Ensure TCP SYN Cookies are enabled (net.ipv4.tcp_syncookies = 1)",
+                collector_type="linux_proc_sysctl",
+                target="net.ipv4.tcp_syncookies",
+                raw_value=None,
+                collected_at=now,
+                status="ERROR",
+                error_message=str(exc),
+            )
+
+    def _collect_linux_login_defs_encrypt_method(self) -> AuditMeasurement:
+        """LNX-CIS-5.4.1.1: Weryfikacja silnego algorytmu hashowania haseł (SHA512/YESCRYPT)."""
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        defs_path = Path("/etc/login.defs")
+        try:
+            if not defs_path.exists():
+                return AuditMeasurement(
+                    check_id="LNX-CIS-5.4.1.1",
+                    category="Password & Account Policies",
+                    title="Ensure password hashing algorithm is SHA-512 or YESCRYPT",
+                    collector_type="linux_login_defs",
+                    target="/etc/login.defs",
+                    raw_value={"value": None, "file_exists": False},
+                    collected_at=now,
+                    status="NOT_APPLICABLE",
+                )
+            val = None
+            for raw_line in defs_path.read_text(encoding="utf-8", errors="replace").splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                match = re.match(r"^ENCRYPT_METHOD\s+(\S+)", line, re.IGNORECASE)
+                if match:
+                    val = match.group(1).upper()
+                    break
+            return AuditMeasurement(
+                check_id="LNX-CIS-5.4.1.1",
+                category="Password & Account Policies",
+                title="Ensure password hashing algorithm is SHA-512 or YESCRYPT",
+                collector_type="linux_login_defs",
+                target="/etc/login.defs::ENCRYPT_METHOD",
+                raw_value={"value": val},
+                collected_at=now,
+                status="COLLECTED",
+            )
+        except Exception as exc:
+            return AuditMeasurement(
+                check_id="LNX-CIS-5.4.1.1",
+                category="Password & Account Policies",
+                title="Ensure password hashing algorithm is SHA-512 or YESCRYPT",
+                collector_type="linux_login_defs",
+                target="/etc/login.defs::ENCRYPT_METHOD",
+                raw_value=None,
+                collected_at=now,
+                status="ERROR",
+                error_message=str(exc),
+            )
+
+    def _collect_linux_sshd_password_auth(self) -> AuditMeasurement:
+        """LNX-CIS-5.2.10: Weryfikacja wyłączenia uwierzytelniania hasłem w SSH."""
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        sshd_path = Path("/etc/ssh/sshd_config")
+        try:
+            if not sshd_path.exists():
+                return AuditMeasurement(
+                    check_id="LNX-CIS-5.2.10",
+                    category="SSH Hardening",
+                    title="Ensure SSH password authentication is disabled",
+                    collector_type="linux_sshd_effective_config",
+                    target="/etc/ssh/sshd_config",
+                    raw_value={"directive": "PasswordAuthentication", "value": None, "file_exists": False},
+                    collected_at=now,
+                    status="NOT_APPLICABLE",
+                )
+            directive_val = "yes"
+            for raw_line in sshd_path.read_text(encoding="utf-8", errors="replace").splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                match = re.match(r"^PasswordAuthentication\s+(\S+)", line, re.IGNORECASE)
+                if match:
+                    directive_val = match.group(1).lower()
+                    break
+            return AuditMeasurement(
+                check_id="LNX-CIS-5.2.10",
+                category="SSH Hardening",
+                title="Ensure SSH password authentication is disabled",
+                collector_type="linux_sshd_effective_config",
+                target="/etc/ssh/sshd_config::PasswordAuthentication",
+                raw_value={"value": directive_val},
+                collected_at=now,
+                status="COLLECTED",
+            )
+        except Exception as exc:
+            return AuditMeasurement(
+                check_id="LNX-CIS-5.2.10",
+                category="SSH Hardening",
+                title="Ensure SSH password authentication is disabled",
+                collector_type="linux_sshd_effective_config",
+                target="/etc/ssh/sshd_config::PasswordAuthentication",
+                raw_value=None,
+                collected_at=now,
+                status="ERROR",
+                error_message=str(exc),
+            )
+
+    def _collect_linux_suid_dumpable(self) -> AuditMeasurement:
+        """LNX-CIS-1.7.1: Weryfikacja blokady zrzutów pamięci programów SUID (fs.suid_dumpable = 0)."""
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        p = Path("/proc/sys/fs/suid_dumpable")
+        try:
+            val = int(p.read_text(encoding="ascii").strip())
+            return AuditMeasurement(
+                check_id="LNX-CIS-1.7.1",
+                category="Kernel Memory Protection",
+                title="Ensure core dumps of SUID programs are restricted (fs.suid_dumpable = 0)",
+                collector_type="linux_proc_sysctl",
+                target="fs.suid_dumpable",
+                raw_value={"value": val},
+                collected_at=now,
+                status="COLLECTED",
+            )
+        except Exception as exc:
+            return AuditMeasurement(
+                check_id="LNX-CIS-1.7.1",
+                category="Kernel Memory Protection",
+                title="Ensure core dumps of SUID programs are restricted (fs.suid_dumpable = 0)",
+                collector_type="linux_proc_sysctl",
+                target="fs.suid_dumpable",
+                raw_value=None,
+                collected_at=now,
+                status="ERROR",
+                error_message=str(exc),
+            )
+
+    def _collect_linux_crontab_permissions(self) -> AuditMeasurement:
+        """LNX-CIS-5.1.1: Weryfikacja uprawnień i właściciela pliku /etc/crontab (0600 root:root)."""
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        p = Path("/etc/crontab")
+        try:
+            if not p.exists():
+                return AuditMeasurement(
+                    check_id="LNX-CIS-5.1.1",
+                    category="Filesystem Integrity & Permissions",
+                    title="Ensure permissions on /etc/crontab are configured (0600 root:root)",
+                    collector_type="linux_file_stat",
+                    target="/etc/crontab",
+                    raw_value={"file_exists": False},
+                    collected_at=now,
+                    status="NOT_APPLICABLE",
+                )
+            import grp
+            import pwd
+            st = p.stat()
+            mode_octal = oct(st.st_mode & 0o777)[2:].zfill(4)
+            owner_name = pwd.getpwuid(st.st_uid).pw_name
+            group_name = grp.getgrgid(st.st_gid).gr_name
+            return AuditMeasurement(
+                check_id="LNX-CIS-5.1.1",
+                category="Filesystem Integrity & Permissions",
+                title="Ensure permissions on /etc/crontab are configured (0600 root:root)",
+                collector_type="linux_file_stat",
+                target="/etc/crontab",
+                raw_value={
+                    "uid": st.st_uid,
+                    "gid": st.st_gid,
+                    "owner": owner_name,
+                    "group": group_name,
+                    "mode_octal": mode_octal,
+                },
+                collected_at=now,
+                status="COLLECTED",
+            )
+        except Exception as exc:
+            return AuditMeasurement(
+                check_id="LNX-CIS-5.1.1",
+                category="Filesystem Integrity & Permissions",
+                title="Ensure permissions on /etc/crontab are configured (0600 root:root)",
+                collector_type="linux_file_stat",
+                target="/etc/crontab",
+                raw_value=None,
+                collected_at=now,
+                status="ERROR",
+                error_message=str(exc),
+            )
+
+    def _collect_linux_icmp_echo_ignore_broadcasts(self) -> AuditMeasurement:
+        """LNX-CIS-3.2.2: Ochrona przed atakami Smurf (icmp_echo_ignore_broadcasts = 1)."""
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        p = Path("/proc/sys/net/ipv4/icmp_echo_ignore_broadcasts")
+        try:
+            val = int(p.read_text(encoding="ascii").strip())
+            return AuditMeasurement(
+                check_id="LNX-CIS-3.2.2",
+                category="Kernel Network Hardening",
+                title="Ensure ICMP broadcast echo requests are ignored (Smurf attack protection)",
+                collector_type="linux_proc_sysctl",
+                target="net.ipv4.icmp_echo_ignore_broadcasts",
+                raw_value={"value": val},
+                collected_at=now,
+                status="COLLECTED",
+            )
+        except Exception as exc:
+            return AuditMeasurement(
+                check_id="LNX-CIS-3.2.2",
+                category="Kernel Network Hardening",
+                title="Ensure ICMP broadcast echo requests are ignored (Smurf attack protection)",
+                collector_type="linux_proc_sysctl",
+                target="net.ipv4.icmp_echo_ignore_broadcasts",
+                raw_value=None,
+                collected_at=now,
+                status="ERROR",
+                error_message=str(exc),
+            )
+
+    def _collect_linux_log_martians(self) -> AuditMeasurement:
+        """LNX-CIS-3.2.4: Weryfikacja logowania podejrzanych pakietów Martian (log_martians = 1)."""
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        keys = {
+            "net.ipv4.conf.all.log_martians": Path("/proc/sys/net/ipv4/conf/all/log_martians"),
+            "net.ipv4.conf.default.log_martians": Path("/proc/sys/net/ipv4/conf/default/log_martians"),
+        }
+        try:
+            vals = {k: int(p.read_text(encoding="ascii").strip()) for k, p in keys.items()}
+            return AuditMeasurement(
+                check_id="LNX-CIS-3.2.4",
+                category="Kernel Network Hardening",
+                title="Ensure suspicious packets (Martians) are logged",
+                collector_type="linux_proc_sysctl",
+                target="net.ipv4.conf.*.log_martians",
+                raw_value={"values": vals},
+                collected_at=now,
+                status="COLLECTED",
+            )
+        except Exception as exc:
+            return AuditMeasurement(
+                check_id="LNX-CIS-3.2.4",
+                category="Kernel Network Hardening",
+                title="Ensure suspicious packets (Martians) are logged",
+                collector_type="linux_proc_sysctl",
+                target="net.ipv4.conf.*.log_martians",
+                raw_value=None,
+                collected_at=now,
+                status="ERROR",
+                error_message=str(exc),
+            )
+
+    def _collect_linux_login_defs_umask(self) -> AuditMeasurement:
+        """LNX-CIS-5.4.4: Weryfikacja domyślnej maski tworzenia plików umask 027."""
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        defs_path = Path("/etc/login.defs")
+        try:
+            if not defs_path.exists():
+                return AuditMeasurement(
+                    check_id="LNX-CIS-5.4.4",
+                    category="Filesystem Integrity & Permissions",
+                    title="Ensure default user umask is 027 or more restrictive",
+                    collector_type="linux_login_defs",
+                    target="/etc/login.defs",
+                    raw_value={"value": None, "file_exists": False},
+                    collected_at=now,
+                    status="NOT_APPLICABLE",
+                )
+            val = None
+            for raw_line in defs_path.read_text(encoding="utf-8", errors="replace").splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                match = re.match(r"^UMASK\s+(\S+)", line, re.IGNORECASE)
+                if match:
+                    val = match.group(1).strip()
+                    break
+            return AuditMeasurement(
+                check_id="LNX-CIS-5.4.4",
+                category="Filesystem Integrity & Permissions",
+                title="Ensure default user umask is 027 or more restrictive",
+                collector_type="linux_login_defs",
+                target="/etc/login.defs::UMASK",
+                raw_value={"value": val},
+                collected_at=now,
+                status="COLLECTED",
+            )
+        except Exception as exc:
+            return AuditMeasurement(
+                check_id="LNX-CIS-5.4.4",
+                category="Filesystem Integrity & Permissions",
+                title="Ensure default user umask is 027 or more restrictive",
+                collector_type="linux_login_defs",
+                target="/etc/login.defs::UMASK",
                 raw_value=None,
                 collected_at=now,
                 status="ERROR",
