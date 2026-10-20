@@ -1,0 +1,1975 @@
+<!DOCTYPE html>
+<html lang="pl" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SystemAuditor Enterprise — Zero-Trust OS Compliance & Security Posture</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              850: '#131c2e',
+              900: '#0f172a',
+              950: '#070b14'
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    body {
+      background-color: #070b14;
+      color: #e2e8f0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .glass-card {
+      background: rgba(19, 28, 46, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(51, 65, 85, 0.6);
+    }
+    .mono {
+      font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- ===================================================================== -->
+  <!-- ZERO-TRUST IAM LOGIN & MFA (TOTP RFC 6238) OVERLAY GATE               -->
+  <!-- ===================================================================== -->
+  <div id="auth-overlay" class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4 overflow-y-auto">
+    <div class="max-w-xl w-full glass-card rounded-2xl border border-slate-700/80 shadow-2xl shadow-cyan-950/50 overflow-hidden my-8">
+
+      <!-- Auth Header -->
+      <div class="p-6 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900 to-cyan-950/40 flex items-center justify-between">
+        <div class="flex items-center gap-3.5">
+          <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-lg font-extrabold text-white tracking-tight">SystemAuditor <span class="text-cyan-400">IAM Gate</span></h2>
+              <span class="px-2 py-0.5 text-[10px] font-bold uppercase bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 rounded-full">PBKDF2 + TOTP 2FA</span>
+            </div>
+            <p class="text-xs text-slate-400">Uwierzytelnianie wieloskładnikowe (MFA RFC 6238) i kontrola dostępu</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-6 space-y-6">
+        <!-- ONE-CLICK DEMO ACCESS BUTTON (NO CREDENTIALS REQUIRED) -->
+        <div class="p-4 rounded-xl bg-gradient-to-r from-emerald-950/70 via-teal-950/60 to-slate-900 border border-emerald-500/40">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div class="text-xs font-bold uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                Tryb Demonstracyjny / Szybki Podgląd
+              </div>
+              <p class="text-xs text-slate-300 mt-1">
+                Wejdź od razu do systemu z załadowanymi danymi testowymi floty <strong>bez wpisywania loginu, hasła i kodu MFA</strong>.
+              </p>
+            </div>
+            <button onclick="triggerQuickDemoLogin()" id="btn-quick-demo" class="shrink-0 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-emerald-500/20 transition flex items-center gap-2">
+              <span>⚡ Zaloguj do Danych Testowych (1-Click)</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="relative flex py-1 items-center">
+          <div class="flex-grow border-t border-slate-800"></div>
+          <span class="flex-shrink mx-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">LUB PEŁNE LOGOWANIE Z MFA (TOTP 2FA)</span>
+          <div class="flex-grow border-t border-slate-800"></div>
+        </div>
+
+        <!-- Error / Info Alert Box -->
+        <div id="auth-alert" class="hidden p-3 rounded-lg text-xs font-medium border"></div>
+
+        <!-- STEP 1: USERNAME & PASSWORD FORM -->
+        <form id="auth-step1-form" onsubmit="handleLoginStep1(event)" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Nazwa użytkownika (Login)</label>
+              <input id="login-username" type="text" value="admin" required
+                     class="w-full px-3.5 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400 mono" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Hasło</label>
+              <input id="login-password" type="password" value="Admin123!" required
+                     class="w-full px-3.5 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400 mono" />
+            </div>
+          </div>
+
+          <div id="bootstrap-creds-box" class="p-3 rounded-lg bg-amber-950/40 border border-amber-500/40 text-[11px] text-amber-200 space-y-1">
+            <div class="font-bold text-amber-300 flex items-center justify-between">
+              <span>🔑 Wbudowane Konto Startowe (Pierwsze Logowanie Produkcyjne):</span>
+              <button type="button" onclick="fillLoginCreds('admin', 'Admin123!')" class="text-cyan-300 hover:underline font-semibold">
+                Wypełnij admin / Admin123!
+              </button>
+            </div>
+            <div>
+              Login: <code class="text-white font-bold">admin</code> &nbsp;|&nbsp; Hasło fabryczne: <code class="text-white font-bold">Admin123!</code> &nbsp;|&nbsp; Sekret MFA: <code class="text-cyan-300">JBSWY3DPEHPK3PXP...</code>
+            </div>
+            <div class="text-[10px] text-amber-300/80">
+              Po pierwszym zalogowaniu system wymusi zmianę hasła fabrycznego lub utworzenie nowego administratora i usunięcie konta wbudowanego.
+            </div>
+          </div>
+
+          <button type="submit" id="btn-login-step1" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs shadow-lg shadow-cyan-900/40 transition">
+            Przejdź do Weryfikacji 2FA / MFA →
+          </button>
+        </form>
+
+        <!-- STEP 2: MFA (TOTP 6-DIGIT) VERIFICATION FORM -->
+        <form id="auth-step2-mfa" onsubmit="handleLoginStep2Mfa(event)" class="hidden space-y-4">
+          <div class="p-3.5 rounded-xl bg-cyan-950/40 border border-cyan-500/40">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-cyan-300 uppercase tracking-wider">Wymagana Weryfikacja 2FA / MFA (TOTP RFC 6238)</span>
+              <span id="mfa-user-pill" class="px-2 py-0.5 text-[11px] font-bold rounded bg-cyan-500/20 text-cyan-200 mono">admin</span>
+            </div>
+            <p class="text-xs text-slate-300 mt-1">
+              Wprowadź 6-cyfrowy kod jednorazowy z aplikacji Google/Microsoft Authenticator lub użyj poniższego Wirtualnego Tokena Sprzętowego.
+            </p>
+          </div>
+
+          <!-- Built-in Virtual Hardware Token helper so the user can test MFA immediately -->
+          <div class="p-4 rounded-xl bg-slate-900 border border-amber-500/40 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-bold uppercase tracking-wider text-amber-300">📱 Wirtualny Token Authenticator (Podgląd Na Żywo)</span>
+              <span id="mfa-virtual-timer" class="text-[11px] text-slate-400 mono">Odświeżenie za --s</span>
+            </div>
+            <div class="flex items-center justify-between gap-3 pt-1">
+              <div>
+                <div class="text-[11px] text-slate-400">Aktualny kod 6-cyfrowy (HMAC-SHA1 30s):</div>
+                <div id="mfa-virtual-code" class="text-2xl font-extrabold text-emerald-400 tracking-widest mono mt-0.5">------</div>
+              </div>
+              <button type="button" onclick="autoFillVirtualTotp()" class="px-3 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 text-xs font-bold transition">
+                Wklej kod TOTP
+              </button>
+            </div>
+            <div class="text-[10px] text-slate-500 mono break-all pt-1">
+              Sekret Base32 (do aplikacji w telefonie): <span id="mfa-virtual-secret" class="text-slate-300"></span>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">6-cyfrowy kod MFA (TOTP)</label>
+            <input id="mfa-totp-input" type="text" maxlength="6" pattern="[0-9]{6}" placeholder="000000" required
+                   class="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-cyan-500/60 text-center text-xl font-extrabold tracking-[0.4em] text-white focus:outline-none focus:border-cyan-400 mono" />
+          </div>
+
+          <div class="flex gap-2">
+            <button type="button" onclick="resetAuthToStep1()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">
+              ← Wróć
+            </button>
+            <button type="submit" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-600 hover:from-emerald-400 hover:to-cyan-500 text-slate-950 font-extrabold text-xs shadow-lg transition">
+              Zweryfikuj Kod MFA i Zaloguj
+            </button>
+          </div>
+        </form>
+
+        <!-- STEP 3 (MANDATORY ON FIRST PRODUCTION LOGIN): HARDEN OR REPLACE BUILTIN ADMIN -->
+        <form id="auth-step3-hardening" onsubmit="handleFirstLoginHardening(event)" class="hidden space-y-4">
+          <div class="p-4 rounded-xl bg-rose-950/60 border border-rose-500/50 space-y-1.5">
+            <div class="flex items-center gap-2 text-rose-300 font-extrabold text-xs uppercase tracking-wider">
+              <span>⚠️ Wymagana Inicjalizacja Produkcyjna (CIS First-Boot Hardening)</span>
+            </div>
+            <p class="text-xs text-slate-200">
+              Zalogowałeś się po raz pierwszy na wbudowane konto fabryczne <code class="text-amber-300 font-bold">admin</code>. Aby przejść do konsoli produkcyjnej, musisz <strong>utworzyć nowego imiennego administratora (z automatycznym usunięciem konta wbudowanego)</strong> lub <strong>wymusić zmianę domyślnego hasła</strong>.
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button type="button" id="btn-harden-replace" onclick="switchHardeningMode('replace_builtin')"
+                    class="p-2.5 rounded-xl text-xs font-bold border bg-cyan-500/20 text-cyan-300 border-cyan-500/50 text-left transition">
+              <div>🛡️ Opcja 1 (Zalecana CIS)</div>
+              <div class="text-[11px] font-normal text-slate-300 mt-0.5">Utwórz nowego admina i USUŃ konto wbudowane <code>admin</code></div>
+            </button>
+            <button type="button" id="btn-harden-passwd" onclick="switchHardeningMode('change_password')"
+                    class="p-2.5 rounded-xl text-xs font-bold border bg-slate-900 text-slate-400 border-slate-800 text-left transition">
+              <div>🔑 Opcja 2</div>
+              <div class="text-[11px] font-normal text-slate-400 mt-0.5">Zachowaj login <code>admin</code> i wymuś zmianę hasła fabrycznego</div>
+            </button>
+          </div>
+
+          <div id="harden-new-user-fields" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Nowy login Administratora (inny niż admin)</label>
+              <input id="harden-username" type="text" value="ciso_admin" minlength="3"
+                     class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white mono" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Imię i Nazwisko / Rola</label>
+              <input id="harden-fullname" type="text" value="Główny Administrator Produkcyjny"
+                     class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Nowe silne hasło produkcyjne (min. 8 znaków)</label>
+              <input id="harden-password" type="password" required minlength="8" placeholder="Nowe silne hasło..."
+                     class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white mono" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Powtórz nowe hasło</label>
+              <input id="harden-password2" type="password" required minlength="8" placeholder="Powtórz hasło..."
+                     class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white mono" />
+            </div>
+          </div>
+
+          <button type="submit" id="btn-submit-hardening" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-600 hover:from-emerald-400 hover:to-cyan-500 text-slate-950 font-extrabold text-xs shadow-lg transition">
+            Zatwierdź Utwardzenie Produkcyjne i Wejdź do Systemu →
+          </button>
+        </form>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- TOP NAVIGATION BAR -->
+  <header class="border-b border-slate-800 bg-slate-950/90 sticky top-0 z-30 backdrop-blur">
+    <div class="max-w-[1600px] mx-auto px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2.5">
+            <h1 class="text-lg font-bold tracking-tight text-white">SystemAuditor <span class="text-cyan-400">Enterprise</span></h1>
+            <span class="px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 rounded-full">Zero-Trust mTLS 1.3</span>
+            <span id="ws-badge" class="px-2 py-0.5 text-[11px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 rounded-full flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> WSS Live
+            </span>
+          </div>
+          <p class="text-xs text-slate-400">Rozproszony System Audytu Konfiguracji OS (Windows &amp; Linux CIS Benchmarks)</p>
+        </div>
+      </div>
+
+      <!-- ACTION TOOLBAR + ACTIVE USER SESSION -->
+      <div class="flex flex-wrap items-center gap-2.5">
+        <button onclick="triggerLiveLocalScan()" id="btn-live-scan" class="px-3.5 py-2 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-semibold shadow-md shadow-cyan-900/30 flex items-center gap-2 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          Skanuj Ten Host Na Żywo (Live OS)
+        </button>
+        <button onclick="openDeployModal()" class="px-3.5 py-2 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-semibold transition flex items-center gap-1.5">
+          <span>+ Wdróż Agenta (Instrukcja)</span>
+        </button>
+        <a href="/api/v1/deploy/agent.py" download="agent_poc.py" class="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-900/30 transition flex items-center gap-1.5">
+          <span>⬇ Pobierz Agenta (agent_poc.py)</span>
+        </a>
+        <button onclick="openPolicyModal()" class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition">
+          Katalog Reguł YAML (22)
+        </button>
+        <button onclick="openExecutiveReport()" class="px-3.5 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition flex items-center gap-1.5">
+          <span>📄 Raport Audytowy PDF (NIS2 / ISO 27001)</span>
+        </button>
+        <button onclick="exportCurrentReportJson()" class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-medium border border-cyan-800/60 transition">
+          Eksport JSON
+        </button>
+
+        <!-- Logged-in User Profile Pill & Logout -->
+        <div class="flex items-center gap-2 pl-2 border-l border-slate-800">
+          <button onclick="switchMainTab('users')" class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-left transition flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <div>
+              <div id="header-username" class="text-xs font-bold text-white leading-none">Niezalogowany</div>
+              <div id="header-userrole" class="text-[10px] text-cyan-400 mono mt-0.5">MFA: --</div>
+            </div>
+          </button>
+          <button onclick="logoutSession()" class="px-2.5 py-2 rounded-lg bg-rose-950/70 hover:bg-rose-900 text-rose-300 border border-rose-700/50 text-xs font-semibold transition" title="Wyloguj z systemu">
+            Wyloguj
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT CONTAINER -->
+  <main class="max-w-[1600px] w-full mx-auto px-6 py-6 flex-1 space-y-6">
+
+    <!-- KPI SUMMARY CARDS -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div class="glass-card rounded-xl p-4">
+        <div class="text-xs font-medium text-slate-400 uppercase tracking-wider">Fleet Security Posture</div>
+        <div class="mt-2 flex items-baseline justify-between">
+          <span id="kpi-score" class="text-3xl font-extrabold text-cyan-400">--%</span>
+          <span class="text-xs text-slate-400">Ważony CVSS CIS</span>
+        </div>
+        <div class="mt-3 w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+          <div id="kpi-score-bar" class="bg-gradient-to-r from-cyan-500 to-emerald-400 h-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <div onclick="switchMainTab('endpoints')" class="glass-card rounded-xl p-4 cursor-pointer hover:border-cyan-500/60 transition group">
+        <div class="flex items-center justify-between">
+          <div class="text-xs font-medium text-slate-400 uppercase tracking-wider group-hover:text-cyan-300 transition">Zarejestrowane Endpointy</div>
+          <span class="text-[10px] text-cyan-400 underline">Przeglądaj katalog →</span>
+        </div>
+        <div class="mt-2 flex items-baseline justify-between">
+          <span id="kpi-agents" class="text-3xl font-extrabold text-white">0</span>
+          <span id="kpi-online" class="text-xs font-semibold text-emerald-400">0 ONLINE</span>
+        </div>
+        <div class="mt-2 text-[11px] text-slate-400">Certyfikaty X.509 mTLS (ECDSA P-256)</div>
+      </div>
+
+      <div class="glass-card rounded-xl p-4">
+        <div class="text-xs font-medium text-slate-400 uppercase tracking-wider">Zgodne Kontrole (PASS)</div>
+        <div class="mt-2 flex items-baseline justify-between">
+          <span id="kpi-pass" class="text-3xl font-extrabold text-emerald-400">0</span>
+          <span class="text-xs text-emerald-400/80">Zgodne ze wzorcem</span>
+        </div>
+        <div class="mt-2 text-[11px] text-slate-400">22 reguły CIS + ISO 27001 + NIS2</div>
+      </div>
+
+      <div class="glass-card rounded-xl p-4">
+        <div class="text-xs font-medium text-slate-400 uppercase tracking-wider">Niezgodności (FAIL)</div>
+        <div class="mt-2 flex items-baseline justify-between">
+          <span id="kpi-fail" class="text-3xl font-extrabold text-amber-400">0</span>
+          <span class="text-xs text-amber-400/80">Auto-Remediacja gotowa</span>
+        </div>
+        <div class="mt-2 text-[11px] text-slate-400">Skrypty .ps1 / .sh / Ansible</div>
+      </div>
+
+      <div class="glass-card rounded-xl p-4 border-rose-500/30">
+        <div class="text-xs font-medium text-rose-300 uppercase tracking-wider">Izolacja Anti-Poisoning</div>
+        <div class="mt-2 flex items-baseline justify-between">
+          <span id="kpi-quarantined" class="text-3xl font-extrabold text-rose-400">0</span>
+          <span class="text-xs text-rose-400">KWARANTANNA</span>
+        </div>
+        <div class="mt-2 text-[11px] text-slate-400">Ochrona przed zatruciem bazy</div>
+      </div>
+    </section>
+
+    <!-- NAVIGATION TABS: POSTURE vs ENDPOINTS vs SOC ALERTS vs USERS -->
+    <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="tab-btn-posture" onclick="switchMainTab('posture')" class="px-4 py-2 rounded-lg text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 transition">
+          🛡️ Panel Audytu CIS, Remediacji &amp; Dryftu
+        </button>
+        <button id="tab-btn-endpoints" onclick="switchMainTab('endpoints')" class="px-4 py-2 rounded-lg text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800 transition flex items-center gap-2">
+          <span>🖥️ Katalog Zarejestrowanych Endpointów</span>
+          <span id="tab-endpoints-badge" class="px-1.5 py-0.5 text-[10px] rounded-full bg-slate-800 text-cyan-400">0</span>
+        </button>
+        <button id="tab-btn-alerts" onclick="switchMainTab('alerts')" class="px-4 py-2 rounded-lg text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800 transition flex items-center gap-2">
+          <span>🔔 Alerty SOC &amp; Webhooki (Slack / Teams / SIEM)</span>
+        </button>
+        <button id="tab-btn-users" onclick="switchMainTab('users')" class="px-4 py-2 rounded-lg text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800 transition flex items-center gap-2">
+          <span>👥 Użytkownicy &amp; MFA (IAM)</span>
+        </button>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="purgeDemoHosts()" class="px-3 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-700/50 text-xs font-semibold transition">
+          Wyczyść Hosty Demo
+        </button>
+        <button onclick="loadDemoHosts()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-medium transition">
+          + Załaduj Przykładową Flotę Demo (4 serwery)
+        </button>
+      </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- VIEW 4: ALERTY SOC & WEBHOOKI (SLACK / MS TEAMS / SIEM)             -->
+    <!-- =================================================================== -->
+    <section id="view-alerts" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Formularz dodawania kanału Webhook / SIEM -->
+        <div class="lg:col-span-4 glass-card rounded-xl p-5 space-y-4">
+          <div>
+            <h2 class="text-base font-bold text-white">Dodaj Kanał Powiadomień SOC</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Automatyczna wysyłka alertów przy spadku wyniku poniżej progu, wykryciu Dryftu Konfiguracji lub próbie Database Poisoning.</p>
+          </div>
+          <form onsubmit="handleCreateWebhookChannel(event)" class="space-y-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Nazwa kanału / integracji</label>
+              <input id="wh-name" type="text" required placeholder="np. Slack #soc-nis2-incidents"
+                     class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white" />
+            </div>
+            <div class="grid grid-cols-2 gap-2.5">
+              <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">Typ Integracji</label>
+                <select id="wh-provider" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white">
+                  <option value="SLACK">Slack Webhook</option>
+                  <option value="TEAMS">Microsoft Teams</option>
+                  <option value="SIEM_HTTP">SIEM HTTP Collector (Splunk/QRadar)</option>
+                  <option value="DISCORD">Discord SOC Bot</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">Próg Posture Score (%)</label>
+                <input id="wh-threshold" type="number" value="70" min="10" max="100"
+                       class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white mono" />
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Docelowy adres Webhook URL</label>
+              <input id="wh-url" type="url" required placeholder="https://hooks.slack.com/services/..."
+                     class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white mono" />
+            </div>
+            <button type="submit" class="w-full py-2.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold shadow-md transition">
+              + Zarejestruj Kanał Webhook SOC
+            </button>
+          </form>
+
+          <div class="pt-3 border-t border-slate-800 space-y-2">
+            <div class="text-xs font-bold text-amber-300">Szybki Test Wysyłki Alertu (Live Dispatch)</div>
+            <p class="text-[11px] text-slate-400">Wyślij natychmiastowy ładunek testowy JSON (Slack Block Kit / Teams Card / SIEM Event) do wszystkich aktywnych kanałów:</p>
+            <button onclick="triggerTestWebhookDispatch()" class="w-full py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition">
+              🚀 Wyślij Testowy Alert Krytyczny do Kanałów SOC
+            </button>
+          </div>
+        </div>
+
+        <!-- Lista kanałów i dziennik dostarczonych ładunków Webhook -->
+        <div class="lg:col-span-8 space-y-6">
+          <div class="glass-card rounded-xl overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+              <h3 class="text-sm font-bold text-white">Skonfigurowane Kanały Webhook &amp; SIEM</h3>
+              <span class="text-[11px] text-emerald-400 mono">Real-Time Event Dispatcher</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="border-b border-slate-800 text-[11px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-900/50">
+                    <th class="py-2.5 px-4">Kanał</th>
+                    <th class="py-2.5 px-4">Provider</th>
+                    <th class="py-2.5 px-4">Warunki Wyzwalania</th>
+                    <th class="py-2.5 px-4 text-right">Akcje</th>
+                  </tr>
+                </thead>
+                <tbody id="webhooks-tbody" class="divide-y divide-slate-800/70 text-xs"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="glass-card rounded-xl overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+              <h3 class="text-sm font-bold text-white">Dziennik Wysłanych Powiadomień (Outbox Payload Inspector)</h3>
+              <span class="text-[11px] text-cyan-400 mono">Ostatnie 25 wysyłek</span>
+            </div>
+            <div id="webhook-deliveries-list" class="divide-y divide-slate-800/60 max-h-[420px] overflow-y-auto p-4 space-y-3"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- VIEW 3: ZARZĄDZANIE UŻYTKOWNIKAMI I MFA (IAM / TOTP RFC 6238)        -->
+    <!-- =================================================================== -->
+    <section id="view-users" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Formularz tworzenia nowego użytkownika -->
+        <div class="lg:col-span-4 glass-card rounded-xl p-5 space-y-4">
+          <div>
+            <h2 class="text-base font-bold text-white">Utwórz Nowego Użytkownika</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Hasła są haszowane algorytmem PBKDF2-HMAC-SHA256 (600 000 iteracji) z indywidualnym kluczem TOTP MFA.</p>
+          </div>
+
+          <form onsubmit="handleCreateUserFromTab(event)" class="space-y-3.5">
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Nazwa użytkownika (Login)</label>
+              <input id="iam-username" type="text" required minlength="3" placeholder="np. secops_marek"
+                     class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white mono" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Imię i Nazwisko / Opis</label>
+              <input id="iam-fullname" type="text" required placeholder="np. Marek Nowak (Audytor CIS)"
+                     class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Hasło początkowe</label>
+              <input id="iam-password" type="password" required minlength="6" placeholder="Minimum 6 znaków"
+                     class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white mono" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Rola w systemie (RBAC)</label>
+              <select id="iam-role" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white">
+                <option value="SUPER_ADMIN">SUPER_ADMIN (Pełny dostęp)</option>
+                <option value="SOC_ANALYST" selected>SOC_ANALYST (Operator Bezpieczeństwa)</option>
+                <option value="AUDITOR_READONLY">AUDITOR_READONLY (Tylko odczyt raportów)</option>
+              </select>
+            </div>
+            <label class="flex items-center gap-2 text-xs text-slate-200 cursor-pointer pt-1">
+              <input id="iam-mfa" type="checkbox" checked class="rounded bg-slate-900 border-slate-700 text-cyan-500" />
+              <span>Wymagaj weryfikacji dwuetapowej <strong>2FA / MFA (TOTP)</strong></span>
+            </label>
+
+            <button type="submit" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs shadow-lg transition">
+              + Dodaj Użytkownika i Wygeneruj Klucz MFA
+            </button>
+          </form>
+
+          <!-- Box pokazujący nowo wygenerowany sekret TOTP po utworzeniu konta -->
+          <div id="iam-created-box" class="hidden p-4 rounded-xl bg-emerald-950/60 border border-emerald-500/50 space-y-2 text-xs">
+            <div class="font-bold text-emerald-300">✓ Utworzono konto i skonfigurowano TOTP MFA!</div>
+            <div class="text-slate-300">Sekret Base32 (Google/MS Authenticator):</div>
+            <div id="iam-created-secret" class="p-2 rounded bg-slate-950 text-cyan-300 font-bold mono break-all"></div>
+            <div class="text-[11px] text-slate-400">Aktualny kod TOTP: <strong id="iam-created-code" class="text-emerald-400 mono text-sm"></strong></div>
+          </div>
+        </div>
+
+        <!-- Tabela zarejestrowanych użytkowników -->
+        <div class="lg:col-span-8 glass-card rounded-xl p-5">
+          <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div>
+              <h2 class="text-base font-bold text-white">Katalog Użytkowników i Tokenów MFA (TOTP RFC 6238)</h2>
+              <p class="text-xs text-slate-400">Podgląd kont uprawnionych do logowania, ich ról RBAC, sekretów Base32 oraz aktualnych kodów TOTP na żywo.</p>
+            </div>
+            <button onclick="fetchUsersList()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 text-xs font-semibold transition">
+              ↻ Odśwież Kody TOTP
+            </button>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-slate-800 text-[11px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-900/60">
+                  <th class="py-3 px-4">Użytkownik</th>
+                  <th class="py-3 px-4">Rola RBAC</th>
+                  <th class="py-3 px-4">Status 2FA / MFA</th>
+                  <th class="py-3 px-4">Sekret Base32 &amp; Aktualny Kod TOTP</th>
+                  <th class="py-3 px-4">Ostatnie Logowanie</th>
+                  <th class="py-3 px-4 text-right">Akcje</th>
+                </tr>
+              </thead>
+              <tbody id="users-tbody" class="divide-y divide-slate-800/60 text-xs">
+                <!-- Dynamicznie wypełniane przez JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- VIEW 2: KATALOG ZAREJESTROWANYCH ENDPOINTÓW (FULL INVENTORY TABLE)   -->
+    <!-- =================================================================== -->
+    <section id="view-endpoints" class="hidden space-y-4">
+      <div class="glass-card rounded-xl p-4">
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <div>
+            <h2 class="text-base font-bold text-white">Rejestr Zarejestrowanych Endpointów (Agent Inventory &amp; PKI Status)</h2>
+            <p class="text-xs text-slate-400">Przeglądaj wszystkie maszyny, ich adresy IP, systemy operacyjne, uprawnienia, identyfikatory sesji rozruchu (Boot ID) oraz statusy mTLS.</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2.5">
+            <input id="endpoint-search" oninput="renderEndpointsInventory()" type="text" placeholder="Szukaj po nazwie, IP, ID lub OS..."
+                   class="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 w-64" />
+            <select id="endpoint-filter-os" onchange="renderEndpointsInventory()" class="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-slate-200">
+              <option value="ALL">Wszystkie OS (Windows + Linux)</option>
+              <option value="windows">Tylko Windows</option>
+              <option value="linux">Tylko Linux</option>
+            </select>
+            <select id="endpoint-filter-status" onchange="renderEndpointsInventory()" class="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-slate-200">
+              <option value="ALL">Wszystkie Statusy</option>
+              <option value="ONLINE">ONLINE</option>
+              <option value="QUARANTINED">QUARANTINED (Kwarantanna)</option>
+              <option value="REVOKED">REVOKED (Unieważniony)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="border-b border-slate-800 text-[11px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-900/60">
+                <th class="py-3 px-4">Hostname &amp; Agent ID</th>
+                <th class="py-3 px-4">System Operacyjny &amp; Arch</th>
+                <th class="py-3 px-4">Adres IP &amp; Uprawnienia</th>
+                <th class="py-3 px-4">Tożsamość PKI / Boot ID</th>
+                <th class="py-3 px-4">Ostatni Kontakt (UTC)</th>
+                <th class="py-3 px-4">Wynik CIS (PASS / FAIL)</th>
+                <th class="py-3 px-4">Status</th>
+                <th class="py-3 px-4 text-right">Akcje Zarządzania</th>
+              </tr>
+            </thead>
+            <tbody id="inventory-tbody" class="divide-y divide-slate-800/60 text-xs">
+              <!-- Dynamicznie wypełniane przez JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- VIEW 1: PANEL AUDYTU CIS & RED-TEAM LAB                             -->
+    <!-- =================================================================== -->
+    <div id="view-posture" class="space-y-6">
+
+    <!-- RED-TEAM / ANTI-POISONING INTERACTIVE LAB BAR -->
+    <section class="glass-card rounded-xl p-4 border-indigo-500/30 bg-gradient-to-r from-slate-900/90 via-indigo-950/25 to-slate-900/90">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded">Poligon Red-Team vs Blue-Team</span>
+            <h2 class="text-sm font-bold text-white">Symulator Kompromitacji Agenta i Zatruwania Bazy Danych (Database Poisoning)</h2>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">
+            Przetestuj na żywo jak Serwer Centralny wykrywa i izoluje próby sfabrykowania raportów przez przejętego agenta (zgodnie z sekcją 4 specyfikacji).
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="simulateAttack('spoofing')" class="px-3 py-1.5 rounded-lg bg-rose-950/80 hover:bg-rose-900 text-rose-200 border border-rose-700/60 text-xs font-medium transition">
+            1. Spoofing Certyfikatu (CN != agent_id)
+          </button>
+          <button onclick="simulateAttack('all_green_lie')" class="px-3 py-1.5 rounded-lg bg-amber-950/80 hover:bg-amber-900 text-amber-200 border border-amber-700/60 text-xs font-medium transition">
+            2. Zatrucie "All-Green Lie" + Zero-Entropy
+          </button>
+          <button onclick="simulateAttack('replay_attack')" class="px-3 py-1.5 rounded-lg bg-purple-950/80 hover:bg-purple-900 text-purple-200 border border-purple-700/60 text-xs font-medium transition">
+            3. Atak Replay (Powtórzony Nonce)
+          </button>
+          <button onclick="simulateAttack('sql_xss_injection')" class="px-3 py-1.5 rounded-lg bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-700/60 text-xs font-medium transition">
+            4. Ładunek SQLi / Stored XSS w Rejestrze
+          </button>
+        </div>
+      </div>
+      <div id="attack-banner" class="hidden mt-3 p-3 rounded-lg bg-rose-950/60 border border-rose-500/50 text-xs text-rose-200 flex items-center justify-between">
+        <span id="attack-banner-text"></span>
+        <button onclick="document.getElementById('attack-banner').classList.add('hidden')" class="text-rose-400 hover:text-white font-bold ml-4">✕</button>
+      </div>
+    </section>
+
+    <!-- MAIN 12-COLUMN WORKSPACE -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- LEFT COLUMN (4 COLS): FLEET ENDPOINTS & SECURITY EVENTS -->
+      <div class="lg:col-span-4 space-y-6">
+
+        <!-- FLEET AGENTS LIST -->
+        <div class="glass-card rounded-xl overflow-hidden">
+          <div class="px-4 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
+            <h3 class="text-sm font-bold text-white">Agenty Endpoint</h3>
+            <button onclick="switchMainTab('endpoints')" class="text-[11px] text-cyan-400 hover:underline font-medium">
+              Pełna tabela endpointów →
+            </button>
+          </div>
+          <div id="agents-list" class="divide-y divide-slate-800/70 max-h-[420px] overflow-y-auto">
+            <!-- Dynamicznie wypełniane przez JS -->
+          </div>
+        </div>
+
+        <!-- SECURITY & PKI AUDIT LOG -->
+        <div class="glass-card rounded-xl overflow-hidden">
+          <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-white">Dziennik Zdarzeń SOC &amp; Anti-Poisoning</h3>
+            <span class="text-[11px] text-cyan-400 mono">SIEM Stream</span>
+          </div>
+          <div id="events-list" class="divide-y divide-slate-800/60 max-h-[360px] overflow-y-auto p-3 space-y-2.5">
+            <!-- Dynamicznie wypełniane przez JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN (8 COLS): SELECTED HOST CIS COMPLIANCE BREAKDOWN -->
+      <div class="lg:col-span-8 space-y-6">
+        <div class="glass-card rounded-xl overflow-hidden">
+          <!-- SELECTED HOST HEADER -->
+          <div class="p-5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4 bg-slate-900/50">
+            <div>
+              <div class="flex items-center gap-2.5">
+                <span id="host-os-badge" class="px-2.5 py-0.5 text-xs font-bold rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">OS</span>
+                <h2 id="host-title" class="text-lg font-bold text-white">Wybierz maszynę z listy...</h2>
+                <span id="host-status-badge" class="px-2.5 py-0.5 text-[11px] font-semibold rounded"></span>
+              </div>
+              <p id="host-subtitle" class="text-xs text-slate-400 mt-1 mono"></p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2.5">
+              <button onclick="openRemediationModal('auto')" class="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition flex items-center gap-1.5">
+                <span>🛠️ Generuj Skrypt Naprawczy (.ps1 / .sh / Ansible)</span>
+              </button>
+              <button onclick="toggleDriftPanel()" id="btn-toggle-drift" class="px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition flex items-center gap-1.5">
+                <span>📈 Historia Zmian &amp; Dryft (Diff Viewer)</span>
+              </button>
+              <button onclick="openExecutiveReport(selectedAgentId)" class="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition">
+                🖨️ Raport PDF Hosta
+              </button>
+              <button id="btn-restore-agent" onclick="restoreSelectedAgent()" class="hidden px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition">
+                Zdejmij Kwarantannę (Restore)
+              </button>
+              <div class="text-right pl-2 border-l border-slate-800">
+                <div class="text-[11px] text-slate-400 uppercase">Wynik Zgodności CIS</div>
+                <div id="host-score" class="text-2xl font-extrabold text-cyan-400">--%</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANEL HISTORII SKANÓW I DETEKTORA DRYFTU KONFIGURACJI (DIFF VIEWER) -->
+          <div id="host-drift-panel" class="hidden m-4 p-4 rounded-xl bg-slate-950/90 border border-indigo-500/40 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">Configuration Drift &amp; Diff Viewer</span>
+                  <h3 class="text-sm font-bold text-white">Porównanie Skanów w Czasie (Wykrywanie Regresji i Napraw)</h3>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-0.5">Śledź zmiany parametrów bezpieczeństwa pomiędzy kolejnymi audytami i wykrywaj nieautoryzowane zmiany (np. wyłączenie zapory lub otwarcie portu).</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button onclick="simulateHostDrift()" class="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition">
+                  ⚡ Symuluj Dryft Konfiguracji na tym Hoście
+                </button>
+                <button onclick="toggleDriftPanel()" class="text-slate-400 hover:text-white text-sm font-bold px-2">✕</button>
+              </div>
+            </div>
+
+            <!-- Oś czasu skanów -->
+            <div id="drift-timeline-pills" class="flex flex-wrap items-center gap-2"></div>
+
+            <!-- Podsumowanie Diff -->
+            <div id="drift-summary-bar" class="p-3 rounded-lg bg-slate-900/90 border border-slate-800 text-xs flex flex-wrap items-center justify-between gap-3"></div>
+
+            <!-- Tabela zmian Diff -->
+            <div class="overflow-x-auto max-h-[320px] overflow-y-auto">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="border-b border-slate-800 text-[10px] font-semibold uppercase text-slate-400 bg-slate-900/60">
+                    <th class="py-2 px-3">Reguła CIS</th>
+                    <th class="py-2 px-3">Typ Zmiany</th>
+                    <th class="py-2 px-3">Poprzedni Skan (Old)</th>
+                    <th class="py-2 px-3">Bieżący Skan (New)</th>
+                  </tr>
+                </thead>
+                <tbody id="drift-diff-tbody" class="divide-y divide-slate-800/60"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- QUARANTINE / POISONING ALERT BOX FOR THIS REPORT -->
+          <div id="report-quarantine-box" class="hidden m-4 p-4 rounded-xl bg-rose-950/70 border border-rose-500/60">
+            <div class="flex items-center gap-2 text-rose-300 font-bold text-sm">
+              <svg class="w-5 h-5 text-rose-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+              </svg>
+              <span>UWAGA: Ten raport został odizolowany w Kwarantannie (Wykryto próbę Database Poisoning!)</span>
+            </div>
+            <ul id="report-quarantine-findings" class="mt-2 text-xs text-rose-200 list-disc list-inside space-y-1 mono"></ul>
+          </div>
+
+          <!-- CIS RULES EVALUATION TABLE -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-slate-800 text-[11px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-900/40">
+                  <th class="py-3 px-4">Reguła CIS / MITRE / Regulacje</th>
+                  <th class="py-3 px-4">Kontrola Bezpieczeństwa</th>
+                  <th class="py-3 px-4">Ryzyko (CVSS)</th>
+                  <th class="py-3 px-4">Dowód z OS (Raw Value)</th>
+                  <th class="py-3 px-4">Status</th>
+                </tr>
+              </thead>
+              <tbody id="checks-tbody" class="divide-y divide-slate-800/60 text-xs">
+                <!-- Dynamicznie wypełniane przez JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    </div>
+  </main>
+
+  <!-- MODAL GENERATORA SKRYPTÓW AUTO-REMEDIACJI (.ps1 / .sh / Ansible) -->
+  <div id="remediation-modal" class="fixed inset-0 bg-black/80 z-50 hidden items-center justify-center p-6">
+    <div class="glass-card rounded-2xl max-w-4xl w-full max-h-[88vh] flex flex-col overflow-hidden border border-emerald-500/40">
+      <div class="px-5 py-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-900/80">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">Auto-Remediation Engine</span>
+            <h3 id="remediation-modal-title" class="text-sm font-bold text-white">Generator Skryptów Naprawczych CIS</h3>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-0.5">Skrypt zawiera automatyczny eksport kopii zapasowej sprzed zmiany oraz obsługę trybów <code class="text-cyan-300">-DryRun</code> oraz <code class="text-amber-300">-Rollback</code>.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="openRemediationModal('ps1')" class="px-2.5 py-1 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 text-xs font-bold transition">PowerShell (.ps1)</button>
+          <button onclick="openRemediationModal('sh')" class="px-2.5 py-1 rounded bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/40 text-xs font-bold transition">Bash (.sh)</button>
+          <button onclick="openRemediationModal('ansible')" class="px-2.5 py-1 rounded bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition">Ansible Playbook (.yml)</button>
+          <button onclick="downloadRemediationFile()" class="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition">⬇ Pobierz Plik</button>
+          <button onclick="closeRemediationModal()" class="text-slate-400 hover:text-white text-lg font-bold ml-2">✕</button>
+        </div>
+      </div>
+      <pre id="remediation-modal-content" class="p-5 text-xs mono text-emerald-200 overflow-auto flex-1 bg-slate-950/95"></pre>
+    </div>
+  </div>
+
+  <!-- MODAL PODGLĄDU POLITYKI YAML / TIMESCALEDB SQL -->
+  <div id="code-modal" class="fixed inset-0 bg-black/75 z-50 hidden items-center justify-center p-6">
+    <div class="glass-card rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden border border-slate-700">
+      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+        <h3 id="modal-title" class="text-sm font-bold text-white">Podgląd</h3>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-white text-lg font-bold">✕</button>
+      </div>
+      <pre id="modal-content" class="p-5 text-xs mono text-cyan-200 overflow-auto flex-1 bg-slate-950/90"></pre>
+    </div>
+  </div>
+
+  <script>
+    let currentOverview = null;
+    let selectedAgentId = null;
+    let currentAgentReport = null;
+
+    // Stan sesji IAM + MFA
+    let activeUserSession = null;
+    let mfaChallengeToken = null;
+    let mfaPendingUsername = null;
+    let mfaCountdownInterval = null;
+
+    function showAuthAlert(msg, isSuccess = false) {
+      const box = document.getElementById('auth-alert');
+      box.classList.remove('hidden');
+      box.className = isSuccess
+        ? 'p-3 rounded-lg text-xs font-medium border bg-emerald-950/70 border-emerald-500/50 text-emerald-200'
+        : 'p-3 rounded-lg text-xs font-medium border bg-rose-950/70 border-rose-500/50 text-rose-200';
+      if (Array.isArray(msg)) {
+        box.textContent = msg.map(m => m.msg || JSON.stringify(m)).join('; ');
+      } else if (typeof msg === 'object' && msg !== null) {
+        box.textContent = JSON.stringify(msg);
+      } else {
+        box.textContent = String(msg);
+      }
+    }
+
+    function hideAuthAlert() {
+      document.getElementById('auth-alert').classList.add('hidden');
+    }
+
+    function fillLoginCreds(user, pass) {
+      document.getElementById('login-username').value = user;
+      document.getElementById('login-password').value = pass;
+      hideAuthAlert();
+    }
+
+    function getAuthHeaders(extra = {}) {
+      const headers = { ...extra };
+      if (activeUserSession && activeUserSession.token) {
+        headers['Authorization'] = `Bearer ${activeUserSession.token}`;
+      }
+      return headers;
+    }
+
+    let currentHardeningMode = 'replace_builtin';
+
+    async function refreshBootstrapStatus() {
+      try {
+        const res = await fetch('/api/v1/auth/bootstrap-status');
+        if (!res.ok) return;
+        const d = await res.json();
+        const box = document.getElementById('bootstrap-creds-box');
+        if (!box) return;
+        if (d.production_hardened) {
+          box.className = 'p-3 rounded-lg bg-emerald-950/40 border border-emerald-500/40 text-[11px] text-emerald-200 space-y-1';
+          box.innerHTML = `
+            <div class="font-bold text-emerald-300">✓ System Utwardzony Produkcyjnie (CIS First-Boot Hardened)</div>
+            <div>Aktywne konta w bazie: <code class="text-white font-bold">${(d.usernames || []).join(', ')}</code></div>
+            <div class="text-[10px] text-emerald-300/80">Domyślne hasło fabryczne zostało zmienione lub wbudowane konto startowe zostało usunięte.</div>
+          `;
+        }
+      } catch (_) {}
+    }
+
+    function resetAuthToStep1() {
+      if (mfaCountdownInterval) clearInterval(mfaCountdownInterval);
+      hideAuthAlert();
+      document.getElementById('auth-step2-mfa').classList.add('hidden');
+      document.getElementById('auth-step3-hardening').classList.add('hidden');
+      document.getElementById('auth-step1-form').classList.remove('hidden');
+      refreshBootstrapStatus();
+    }
+
+    function switchHardeningMode(mode) {
+      currentHardeningMode = mode;
+      const btnReplace = document.getElementById('btn-harden-replace');
+      const btnPasswd = document.getElementById('btn-harden-passwd');
+      const newUserFields = document.getElementById('harden-new-user-fields');
+
+      if (mode === 'replace_builtin') {
+        newUserFields.classList.remove('hidden');
+        btnReplace.className = 'p-2.5 rounded-xl text-xs font-bold border bg-cyan-500/20 text-cyan-300 border-cyan-500/50 text-left transition';
+        btnPasswd.className = 'p-2.5 rounded-xl text-xs font-bold border bg-slate-900 text-slate-400 border-slate-800 text-left transition';
+      } else {
+        newUserFields.classList.add('hidden');
+        btnPasswd.className = 'p-2.5 rounded-xl text-xs font-bold border bg-cyan-500/20 text-cyan-300 border-cyan-500/50 text-left transition';
+        btnReplace.className = 'p-2.5 rounded-xl text-xs font-bold border bg-slate-900 text-slate-400 border-slate-800 text-left transition';
+      }
+    }
+
+    function showFirstLoginHardeningStep(token, user) {
+      activeUserSession = { token, user };
+      hideAuthAlert();
+      document.getElementById('auth-step1-form').classList.add('hidden');
+      document.getElementById('auth-step2-mfa').classList.add('hidden');
+      document.getElementById('auth-step3-hardening').classList.remove('hidden');
+      switchHardeningMode('replace_builtin');
+    }
+
+    async function handleFirstLoginHardening(e) {
+      e.preventDefault();
+      hideAuthAlert();
+      const p1 = document.getElementById('harden-password').value;
+      const p2 = document.getElementById('harden-password2').value;
+      if (p1 !== p2) {
+        showAuthAlert('Wprowadzone hasła nie są identyczne!');
+        return;
+      }
+
+      const payload = {
+        mode: currentHardeningMode,
+        new_username: document.getElementById('harden-username').value.trim(),
+        new_full_name: document.getElementById('harden-fullname').value.trim(),
+        new_password: p1,
+        rotate_mfa_secret: true
+      };
+
+      const btn = document.getElementById('btn-submit-hardening');
+      const oldText = btn.textContent;
+      btn.textContent = 'Przetwarzanie utwardzenia produkcyjnego...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/v1/auth/first-login-hardening', {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(payload)
+        });
+        let data = {};
+        try {
+          data = await res.json();
+        } catch (_) {
+          data = { detail: await res.text() };
+        }
+        if (!res.ok) {
+          showAuthAlert(data.detail || 'Błąd utwardzania konta produkcyjnego.');
+          return;
+        }
+
+        selectedAgentId = null;
+        completeLoginSession(data.access_token, data.user);
+        switchMainTab('users');
+        if (data.mfa_provisioning) {
+          const box = document.getElementById('iam-created-box');
+          if (box) {
+            box.classList.remove('hidden');
+            document.getElementById('iam-created-secret').textContent = data.mfa_provisioning.secret_base32;
+            document.getElementById('iam-created-code').textContent = data.mfa_provisioning.totp_code;
+          }
+        }
+      } catch (err) {
+        showAuthAlert('Błąd połączenia z serwerem: ' + err.message);
+      } finally {
+        btn.textContent = oldText;
+        btn.disabled = false;
+      }
+    }
+
+    async function handleLoginStep1(e) {
+      e.preventDefault();
+      hideAuthAlert();
+      const username = document.getElementById('login-username').value.trim();
+      const password = document.getElementById('login-password').value;
+
+      const res = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showAuthAlert(data.detail || 'Błąd uwierzytelniania.');
+        return;
+      }
+
+      if (data.mfa_required) {
+        mfaChallengeToken = data.mfa_challenge_token;
+        mfaPendingUsername = data.username;
+        document.getElementById('mfa-user-pill').textContent = `${data.username} (${data.full_name})`;
+        document.getElementById('auth-step1-form').classList.add('hidden');
+        document.getElementById('auth-step2-mfa').classList.remove('hidden');
+
+        if (data.demo_virtual_authenticator) {
+          document.getElementById('mfa-virtual-code').textContent = data.demo_virtual_authenticator.totp_code;
+          document.getElementById('mfa-virtual-timer').textContent = `Odświeżenie za ${data.demo_virtual_authenticator.valid_for_seconds}s`;
+          document.getElementById('mfa-virtual-secret').textContent = data.demo_virtual_authenticator.secret_base32;
+        }
+        document.getElementById('mfa-totp-input').value = '';
+        document.getElementById('mfa-totp-input').focus();
+        startVirtualAuthenticatorPolling(data.username);
+      } else if (data.require_initial_hardening) {
+        showFirstLoginHardeningStep(data.access_token, data.user);
+      } else {
+        completeLoginSession(data.access_token, data.user);
+      }
+    }
+
+    function startVirtualAuthenticatorPolling(username) {
+      if (mfaCountdownInterval) clearInterval(mfaCountdownInterval);
+      mfaCountdownInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/v1/auth/mfa/live-code/${encodeURIComponent(username)}`);
+          if (res.ok) {
+            const d = await res.json();
+            document.getElementById('mfa-virtual-code').textContent = d.totp_code;
+            document.getElementById('mfa-virtual-timer').textContent = `Odświeżenie za ${d.valid_for_seconds}s`;
+          }
+        } catch (_) {}
+      }, 1000);
+    }
+
+    function autoFillVirtualTotp() {
+      const code = document.getElementById('mfa-virtual-code').textContent.trim();
+      if (code && code.length === 6) {
+        document.getElementById('mfa-totp-input').value = code;
+      }
+    }
+
+    async function handleLoginStep2Mfa(e) {
+      e.preventDefault();
+      hideAuthAlert();
+      const totpCode = document.getElementById('mfa-totp-input').value.trim();
+
+      const res = await fetch('/api/v1/auth/mfa/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mfa_challenge_token: mfaChallengeToken,
+          totp_code: totpCode
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showAuthAlert(data.detail || 'Nieprawidłowy kod MFA.');
+        return;
+      }
+
+      if (mfaCountdownInterval) clearInterval(mfaCountdownInterval);
+      if (data.require_initial_hardening) {
+        showFirstLoginHardeningStep(data.access_token, data.user);
+      } else {
+        completeLoginSession(data.access_token, data.user);
+      }
+    }
+
+    async function triggerQuickDemoLogin() {
+      hideAuthAlert();
+      const btn = document.getElementById('btn-quick-demo');
+      const oldHtml = btn.innerHTML;
+      btn.innerHTML = 'Ładowanie floty testowej i logowanie...';
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/v1/auth/demo-quick-login', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          completeLoginSession(data.access_token, data.user);
+        } else {
+          showAuthAlert('Błąd logowania demonstracyjnego.');
+        }
+      } finally {
+        btn.innerHTML = oldHtml;
+        btn.disabled = false;
+      }
+    }
+
+    function completeLoginSession(token, user) {
+      activeUserSession = { token, user };
+      sessionStorage.setItem('sa_session', JSON.stringify(activeUserSession));
+
+      document.getElementById('auth-overlay').classList.add('hidden');
+      document.getElementById('header-username').textContent = `${user.username} (${user.role})`;
+      document.getElementById('header-userrole').textContent = user.is_demo_session
+        ? '⚡ SESJA TESTOWA DEMO'
+        : (user.mfa_enabled ? '🔒 PRODUKCJA (2FA/MFA)' : '🔓 PRODUKCJA (BEZ MFA)');
+
+      fetchOverview();
+      fetchUsersList();
+    }
+
+    function logoutSession() {
+      activeUserSession = null;
+      sessionStorage.removeItem('sa_session');
+      if (mfaCountdownInterval) clearInterval(mfaCountdownInterval);
+      resetAuthToStep1();
+      document.getElementById('auth-overlay').classList.remove('hidden');
+    }
+
+    async function fetchUsersList() {
+      if (!activeUserSession) return;
+      const res = await fetch('/api/v1/users', { headers: getAuthHeaders() });
+      if (!res.ok) return;
+      const data = await res.json();
+      const tbody = document.getElementById('users-tbody');
+      if (!tbody) return;
+
+      tbody.innerHTML = data.users.map(u => {
+        const mfaBadge = u.mfa_enabled
+          ? '<span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">AKTYWNE (TOTP)</span>'
+          : '<span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">WYŁĄCZONE</span>';
+
+        const builtinBadge = u.is_builtin
+          ? '<span class="ml-1.5 px-1.5 py-0.5 text-[9px] font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">WBUDOWANE</span>'
+          : '<span class="ml-1.5 px-1.5 py-0.5 text-[9px] font-bold rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">PRODUKCYJNE</span>';
+
+        return `
+          <tr class="hover:bg-slate-900/60 transition">
+            <td class="py-3.5 px-4">
+              <div class="font-bold text-white mono flex items-center">${escapeHtml(u.username)} ${builtinBadge}</div>
+              <div class="text-[11px] text-slate-400">${escapeHtml(u.full_name)}</div>
+            </td>
+            <td class="py-3.5 px-4">
+              <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 mono">${escapeHtml(u.role)}</span>
+            </td>
+            <td class="py-3.5 px-4">${mfaBadge}</td>
+            <td class="py-3.5 px-4 mono">
+              <div class="text-[11px] text-slate-300">Sekret: <span class="text-cyan-300">${escapeHtml(u.mfa_secret)}</span></div>
+              <div class="text-xs mt-0.5">
+                Aktualny kod TOTP: <strong class="text-emerald-400 tracking-wider">${escapeHtml(u.current_totp_preview)}</strong>
+                <span class="text-[10px] text-slate-500">(ważny ${u.totp_remaining_sec}s)</span>
+              </div>
+            </td>
+            <td class="py-3.5 px-4 mono text-[11px] text-slate-400">
+              ${u.last_login_utc ? escapeHtml(u.last_login_utc.slice(0, 19).replace('T', ' ')) : 'Nigdy'}
+            </td>
+            <td class="py-3.5 px-4 text-right whitespace-nowrap space-x-1.5">
+              <button onclick="toggleUserMfa('${u.user_id}', ${!u.mfa_enabled})" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-medium transition">
+                ${u.mfa_enabled ? 'Wyłącz MFA' : 'Włącz MFA'}
+              </button>
+              <button onclick="deleteUserById('${u.user_id}')" class="px-2.5 py-1 rounded bg-rose-950/70 hover:bg-rose-900 text-rose-300 border border-rose-700/50 text-[11px] font-medium transition">
+                Usuń
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function handleCreateUserFromTab(e) {
+      e.preventDefault();
+      const username = document.getElementById('iam-username').value.trim();
+      const full_name = document.getElementById('iam-fullname').value.trim();
+      const password = document.getElementById('iam-password').value;
+      const role = document.getElementById('iam-role').value;
+      const mfa_enabled = document.getElementById('iam-mfa').checked;
+
+      const res = await fetch('/api/v1/users', {
+        method: 'POST',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ username, full_name, password, role, mfa_enabled })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.detail || 'Błąd podczas tworzenia konta.');
+        return;
+      }
+
+      document.getElementById('iam-username').value = '';
+      document.getElementById('iam-fullname').value = '';
+      document.getElementById('iam-password').value = '';
+
+      const box = document.getElementById('iam-created-box');
+      box.classList.remove('hidden');
+      document.getElementById('iam-created-secret').textContent = data.mfa_provisioning.secret_base32;
+      document.getElementById('iam-created-code').textContent = data.mfa_provisioning.initial_totp_code;
+
+      await fetchUsersList();
+      await fetchOverview();
+    }
+
+    async function toggleUserMfa(userId, enabled) {
+      await fetch(`/api/v1/users/${userId}/toggle-mfa?enabled=${enabled}`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      await fetchUsersList();
+    }
+
+    async function deleteUserById(userId) {
+      await fetch(`/api/v1/users/${userId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+      await fetchUsersList();
+    }
+
+    async function fetchOverview() {
+      const res = await fetch('/api/v1/dashboard/overview');
+      currentOverview = await res.json();
+      renderSummary(currentOverview.summary);
+      renderAgentsList(currentOverview.agents);
+      renderEndpointsInventory();
+      renderSecurityEvents(currentOverview.security_events);
+
+      if (!selectedAgentId && currentOverview.agents.length > 0) {
+        selectAgent(currentOverview.agents[0].agent_id);
+      } else if (selectedAgentId) {
+        selectAgent(selectedAgentId);
+      }
+    }
+
+    function switchMainTab(tabName) {
+      const viewPosture = document.getElementById('view-posture');
+      const viewEndpoints = document.getElementById('view-endpoints');
+      const viewUsers = document.getElementById('view-users');
+      const viewAlerts = document.getElementById('view-alerts');
+      const btnPosture = document.getElementById('tab-btn-posture');
+      const btnEndpoints = document.getElementById('tab-btn-endpoints');
+      const btnUsers = document.getElementById('tab-btn-users');
+      const btnAlerts = document.getElementById('tab-btn-alerts');
+
+      const inactiveClass = 'px-4 py-2 rounded-lg text-xs font-bold bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800 transition flex items-center gap-2';
+      const activeClass = 'px-4 py-2 rounded-lg text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 transition flex items-center gap-2';
+
+      viewPosture.classList.add('hidden');
+      viewEndpoints.classList.add('hidden');
+      viewUsers.classList.add('hidden');
+      if (viewAlerts) viewAlerts.classList.add('hidden');
+      btnPosture.className = inactiveClass;
+      btnEndpoints.className = inactiveClass;
+      btnUsers.className = inactiveClass;
+      if (btnAlerts) btnAlerts.className = inactiveClass;
+
+      if (tabName === 'endpoints') {
+        viewEndpoints.classList.remove('hidden');
+        btnEndpoints.className = activeClass;
+        renderEndpointsInventory();
+      } else if (tabName === 'users') {
+        viewUsers.classList.remove('hidden');
+        btnUsers.className = activeClass;
+        fetchUsersList();
+      } else if (tabName === 'alerts') {
+        if (viewAlerts) viewAlerts.classList.remove('hidden');
+        if (btnAlerts) btnAlerts.className = activeClass;
+        fetchWebhookChannels();
+      } else {
+        viewPosture.classList.remove('hidden');
+        btnPosture.className = activeClass;
+      }
+    }
+
+    function renderSummary(s) {
+      document.getElementById('kpi-score').textContent = `${s.fleet_posture_score}%`;
+      document.getElementById('kpi-score-bar').style.width = `${s.fleet_posture_score}%`;
+      document.getElementById('kpi-agents').textContent = s.total_agents;
+      document.getElementById('tab-endpoints-badge').textContent = s.total_agents;
+      document.getElementById('kpi-online').textContent = `${s.online_agents} ONLINE`;
+      document.getElementById('kpi-pass').textContent = s.total_passed_checks;
+      document.getElementById('kpi-fail').textContent = s.total_failed_checks;
+      document.getElementById('kpi-quarantined').textContent = s.quarantined_agents;
+    }
+
+    function renderEndpointsInventory() {
+      if (!currentOverview) return;
+      const tbody = document.getElementById('inventory-tbody');
+      const searchVal = (document.getElementById('endpoint-search')?.value || '').toLowerCase();
+      const osFilter = document.getElementById('endpoint-filter-os')?.value || 'ALL';
+      const statusFilter = document.getElementById('endpoint-filter-status')?.value || 'ALL';
+
+      const filtered = currentOverview.agents.filter(a => {
+        const matchSearch = !searchVal ||
+          a.hostname.toLowerCase().includes(searchVal) ||
+          a.agent_id.toLowerCase().includes(searchVal) ||
+          a.ip_address.toLowerCase().includes(searchVal) ||
+          a.os_release.toLowerCase().includes(searchVal);
+        const matchOs = osFilter === 'ALL' || a.os_family.toLowerCase() === osFilter;
+        const matchStatus = statusFilter === 'ALL' || a.status === statusFilter;
+        return matchSearch && matchOs && matchStatus;
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-500">Brak zarejestrowanych endpointów spełniających kryteria filtra.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(a => {
+        const isWin = a.os_family.toLowerCase() === 'windows';
+        const statusColor = a.status === 'QUARANTINED'
+          ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+          : (a.status === 'REVOKED' ? 'bg-red-900/40 text-red-300 border-red-700' : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30');
+        const scoreColor = a.current_score >= 80
+          ? 'text-emerald-400'
+          : (a.current_score >= 50 ? 'text-amber-400' : 'text-rose-400');
+
+        return `
+          <tr class="hover:bg-slate-900/60 transition">
+            <td class="py-3.5 px-4">
+              <div class="font-bold text-white flex items-center gap-2">
+                <span class="px-1.5 py-0.5 text-[10px] font-bold rounded ${isWin ? 'bg-blue-500/20 text-blue-300' : 'bg-orange-500/20 text-orange-300'}">${isWin ? 'WIN' : 'LNX'}</span>
+                <span>${escapeHtml(a.hostname)}</span>
+              </div>
+              <div class="text-[11px] text-slate-400 mono mt-0.5">${escapeHtml(a.agent_id)}</div>
+            </td>
+            <td class="py-3.5 px-4">
+              <div class="text-slate-200 font-medium">${escapeHtml(a.os_release)}</div>
+              <div class="text-[11px] text-slate-400 mono">Arch: ${escapeHtml(a.architecture)} | Polityka: ${escapeHtml(a.policy_version)}</div>
+            </td>
+            <td class="py-3.5 px-4">
+              <div class="text-cyan-300 mono font-semibold">${escapeHtml(a.ip_address)}</div>
+              <div class="text-[11px] mt-0.5 ${a.is_elevated ? 'text-emerald-400' : 'text-amber-400'}">
+                ${a.is_elevated ? 'Uprawnienia: SYSTEM / root' : 'Uprawnienia: Standard User'}
+              </div>
+            </td>
+            <td class="py-3.5 px-4 mono text-[11px]">
+              <div class="text-slate-300">SPIFFE: spiffe://auditor/agent/${escapeHtml(a.agent_id.slice(0, 14))}...</div>
+              <div class="text-slate-500 mt-0.5">Boot ID: ${escapeHtml(a.boot_id || 'N/A')}</div>
+            </td>
+            <td class="py-3.5 px-4 mono text-[11px] text-slate-300">
+              <div>HB: ${(a.last_heartbeat_utc || '').slice(0, 19).replace('T', ' ')}</div>
+              <div class="text-slate-500">Audyt: ${(a.last_audit_utc || '').slice(0, 19).replace('T', ' ')}</div>
+            </td>
+            <td class="py-3.5 px-4">
+              <div class="text-base font-extrabold ${scoreColor}">${a.current_score}%</div>
+              <div class="text-[11px] text-slate-400">
+                <span class="text-emerald-400 font-semibold">${a.pass_count} PASS</span> /
+                <span class="text-rose-400 font-semibold">${a.fail_count} FAIL</span>
+              </div>
+            </td>
+            <td class="py-3.5 px-4">
+              <span class="px-2.5 py-1 text-[10px] font-bold border rounded-full ${statusColor}">${a.status}</span>
+            </td>
+            <td class="py-3.5 px-4 text-right whitespace-nowrap space-x-1.5">
+              <button onclick="inspectEndpointFromInventory('${a.agent_id}')" class="px-2.5 py-1 rounded bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 border border-cyan-500/40 text-[11px] font-semibold transition">
+                Szczegóły Audytu
+              </button>
+              ${a.status !== 'ONLINE' ? `
+                <button onclick="restoreAgentById('${a.agent_id}')" class="px-2.5 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/40 text-[11px] font-semibold transition">
+                  Przywróć
+                </button>
+              ` : `
+                <button onclick="revokeAgentById('${a.agent_id}')" class="px-2.5 py-1 rounded bg-amber-950/70 hover:bg-amber-900 text-amber-300 border border-amber-700/50 text-[11px] font-medium transition">
+                  Unieważnij Cert
+                </button>
+              `}
+              <button onclick="deleteAgentById('${a.agent_id}')" class="px-2 py-1 rounded bg-rose-950/70 hover:bg-rose-900 text-rose-300 border border-rose-700/50 text-[11px] font-medium transition" title="Usuń endpoint z rejestru">
+                Usuń
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function inspectEndpointFromInventory(agentId) {
+      switchMainTab('posture');
+      await selectAgent(agentId);
+    }
+
+    async function revokeAgentById(agentId) {
+      await fetch(`/api/v1/agents/${agentId}/revoke`, { method: 'POST' });
+      await fetchOverview();
+    }
+
+    async function restoreAgentById(agentId) {
+      await fetch(`/api/v1/agents/${agentId}/restore`, { method: 'POST' });
+      await fetchOverview();
+    }
+
+    async function deleteAgentById(agentId) {
+      await fetch(`/api/v1/agents/${agentId}`, { method: 'DELETE' });
+      if (selectedAgentId === agentId) selectedAgentId = null;
+      await fetchOverview();
+    }
+
+    function renderAgentsList(agents) {
+      const container = document.getElementById('agents-list');
+      container.innerHTML = agents.map(a => {
+        const isSelected = a.agent_id === selectedAgentId;
+        const isWin = a.os_family.toLowerCase() === 'windows';
+        const statusColor = a.status === 'QUARANTINED'
+          ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+          : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+        const scoreColor = a.current_score >= 80
+          ? 'text-emerald-400'
+          : (a.current_score >= 50 ? 'text-amber-400' : 'text-rose-400');
+
+        return `
+          <div onclick="selectAgent('${a.agent_id}')"
+               class="p-3.5 cursor-pointer transition hover:bg-slate-800/60 ${isSelected ? 'bg-slate-800/90 border-l-4 border-l-cyan-400' : ''}">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2 truncate">
+                <span class="px-1.5 py-0.5 text-[10px] font-bold rounded ${isWin ? 'bg-blue-500/20 text-blue-300' : 'bg-orange-500/20 text-orange-300'}">
+                  ${isWin ? 'WIN' : 'LNX'}
+                </span>
+                <span class="font-semibold text-xs text-white truncate">${a.hostname}</span>
+              </div>
+              <span class="px-2 py-0.5 text-[10px] font-bold border rounded-full ${statusColor}">${a.status}</span>
+            </div>
+            <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+              <span class="mono">${a.ip_address} • ${a.os_release.slice(0, 26)}</span>
+              <span class="font-bold text-sm ${scoreColor}">${a.current_score}%</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderSecurityEvents(events) {
+      const container = document.getElementById('events-list');
+      container.innerHTML = events.map(e => {
+        const badge = e.severity === 'CRITICAL'
+          ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+          : (e.severity === 'HIGH' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30');
+        return `
+          <div class="p-2.5 rounded-lg bg-slate-900/70 border border-slate-800 text-xs">
+            <div class="flex items-center justify-between gap-2">
+              <span class="px-1.5 py-0.5 text-[10px] font-bold border rounded ${badge}">${e.event_type}</span>
+              <span class="text-[10px] text-slate-500 mono">${e.timestamp_utc.slice(11, 19)} UTC</span>
+            </div>
+            <div class="font-semibold text-slate-200 mt-1">${e.title}</div>
+            <div class="text-[11px] text-slate-400 mt-0.5 break-words">${e.details}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function selectAgent(agentId) {
+      selectedAgentId = agentId;
+      if (currentOverview) renderAgentsList(currentOverview.agents);
+
+      const res = await fetch(`/api/v1/agents/${agentId}/latest-report?include_quarantined=true`);
+      if (!res.ok) return;
+      const data = await res.json();
+      currentAgentReport = data;
+      const { agent, report } = data;
+
+      document.getElementById('host-os-badge').textContent = agent.os_family.toUpperCase();
+      document.getElementById('host-title').textContent = agent.hostname;
+      document.getElementById('host-subtitle').textContent =
+        `ID: ${agent.agent_id} | IP: ${agent.ip_address} | OS: ${agent.os_release} | Polityka: ${report.policy_version}`;
+      document.getElementById('host-score').textContent = `${agent.current_score}%`;
+
+      const statusBadge = document.getElementById('host-status-badge');
+      statusBadge.textContent = agent.status;
+      statusBadge.className = agent.status === 'QUARANTINED'
+        ? 'px-2.5 py-0.5 text-xs font-bold rounded bg-rose-500/20 text-rose-300 border border-rose-500/40'
+        : 'px-2.5 py-0.5 text-xs font-bold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+
+      const btnRestore = document.getElementById('btn-restore-agent');
+      if (agent.status === 'QUARANTINED') {
+        btnRestore.classList.remove('hidden');
+      } else {
+        btnRestore.classList.add('hidden');
+      }
+
+      const qBox = document.getElementById('report-quarantine-box');
+      const qList = document.getElementById('report-quarantine-findings');
+      if (report.is_quarantined) {
+        qBox.classList.remove('hidden');
+        qList.innerHTML = report.anomaly_findings.map(f => `<li>${escapeHtml(f)}</li>`).join('');
+      } else {
+        qBox.classList.add('hidden');
+      }
+
+      const tbody = document.getElementById('checks-tbody');
+      tbody.innerHTML = report.evaluated_results.map(r => {
+        const statusPill = r.compliance_status === 'PASS'
+          ? '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">PASS</span>'
+          : (r.compliance_status === 'NOT_APPLICABLE'
+            ? '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-800 text-slate-400 border border-slate-700">N/A</span>'
+            : '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">FAIL</span>');
+
+        const sevColor = r.risk_severity === 'CRITICAL'
+          ? 'text-rose-400 font-bold'
+          : (r.risk_severity === 'HIGH' ? 'text-amber-400 font-semibold' : 'text-cyan-300');
+
+        const mitreBadges = (r.mitre_attack || []).map(m =>
+          `<span class="px-1.5 py-0.5 text-[10px] mono bg-slate-800 text-slate-300 rounded border border-slate-700">${m}</span>`
+        ).join(' ');
+
+        const cf = r.compliance_frameworks || {};
+        const regBadges = [
+          cf.iso27001 ? `<span class="px-1.5 py-0.5 text-[9px] font-semibold bg-indigo-500/15 text-indigo-300 rounded border border-indigo-500/30" title="${escapeHtml(cf.iso27001)}">ISO ${escapeHtml(cf.iso27001.split(' ')[0])}</span>` : '',
+          cf.nis2 ? `<span class="px-1.5 py-0.5 text-[9px] font-semibold bg-purple-500/15 text-purple-300 rounded border border-purple-500/30" title="${escapeHtml(cf.nis2)}">NIS2</span>` : '',
+          cf.ksc ? `<span class="px-1.5 py-0.5 text-[9px] font-semibold bg-emerald-500/10 text-emerald-300 rounded border border-emerald-500/25" title="${escapeHtml(cf.ksc)}">KSC</span>` : ''
+        ].filter(Boolean).join(' ');
+
+        return `
+          <tr class="hover:bg-slate-900/50 transition">
+            <td class="py-3.5 px-4 align-top">
+              <div class="font-bold text-white mono">${r.rule_id}</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">${r.category}</div>
+              <div class="mt-1.5 flex flex-wrap gap-1">${mitreBadges}</div>
+              ${regBadges ? `<div class="mt-1 flex flex-wrap gap-1">${regBadges}</div>` : ''}
+            </td>
+            <td class="py-3.5 px-4 align-top max-w-md">
+              <div class="font-semibold text-slate-100">${escapeHtml(r.title)}</div>
+              <div class="text-[11px] text-slate-400 mt-1">${escapeHtml(r.rationale)}</div>
+              ${cf.iso27001 || cf.nis2 ? `
+                <div class="mt-1.5 text-[10px] text-indigo-300/80">
+                  <b>Zgodność prawna:</b> ${escapeHtml(cf.iso27001 || '')} ${cf.nis2 ? ' • ' + escapeHtml(cf.nis2) : ''}
+                </div>
+              ` : ''}
+              ${r.compliance_status !== 'PASS' && r.compliance_status !== 'NOT_APPLICABLE' ? `
+                <div class="mt-2 p-2 rounded bg-slate-900/90 border border-slate-800 text-[11px] text-amber-200/90 mono">
+                  <strong class="text-amber-400">Remediacja CIS:</strong> ${escapeHtml(r.remediation)}
+                </div>
+              ` : ''}
+            </td>
+            <td class="py-3.5 px-4 align-top whitespace-nowrap">
+              <div class="${sevColor}">${r.risk_severity}</div>
+              <div class="text-[11px] text-slate-400 mono">CVSS ${r.cvss_base_score}</div>
+            </td>
+            <td class="py-3.5 px-4 align-top">
+              <pre class="p-2 rounded bg-slate-950 border border-slate-800 text-[11px] text-cyan-300 mono overflow-x-auto max-w-[240px]">${escapeHtml(JSON.stringify(r.observed_value, null, 2))}</pre>
+              <div class="text-[10px] text-slate-500 mt-1 mono">Wzorzec: ${escapeHtml(r.expected_summary)}</div>
+            </td>
+            <td class="py-3.5 px-4 align-top">${statusPill}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const driftPanel = document.getElementById('host-drift-panel');
+      if (driftPanel && !driftPanel.classList.contains('hidden')) {
+        loadHostDriftData(agentId);
+      }
+    }
+
+    async function triggerLiveLocalScan() {
+      const btn = document.getElementById('btn-live-scan');
+      const oldText = btn.innerHTML;
+      btn.innerHTML = 'Skanowanie natywnych rejestrów i polityk OS...';
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/v1/agents/trigger-local-scan', { method: 'POST' });
+        const data = await res.json();
+        selectedAgentId = data.agent_id;
+        await fetchOverview();
+      } finally {
+        btn.innerHTML = oldText;
+        btn.disabled = false;
+      }
+    }
+
+    async function simulateAttack(scenario) {
+      const res = await fetch('/api/v1/security/simulate-attack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenario, target_agent_id: selectedAgentId })
+      });
+      const data = await res.json();
+      const banner = document.getElementById('attack-banner');
+      const bannerText = document.getElementById('attack-banner-text');
+      banner.classList.remove('hidden');
+      bannerText.textContent = `[OCHRONA ANTI-POISONING AKTYWNA] Scenariusz '${scenario}': ${data.message}`;
+      await fetchOverview();
+    }
+
+    async function restoreSelectedAgent() {
+      if (!selectedAgentId) return;
+      await fetch(`/api/v1/agents/${selectedAgentId}/restore`, { method: 'POST' });
+      await fetchOverview();
+    }
+
+    async function purgeDemoHosts() {
+      await fetch('/api/v1/agents/purge-demo', { method: 'POST' });
+      selectedAgentId = null;
+      await fetchOverview();
+    }
+
+    async function loadDemoHosts() {
+      await fetch('/api/v1/agents/load-demo', { method: 'POST' });
+      await fetchOverview();
+    }
+
+    async function openDeployModal() {
+      document.getElementById('modal-title').textContent = 'Skąd wziąć i jak uruchomić Agenta na innych serwerach (Zero-Dependency)';
+      document.getElementById('code-modal').classList.remove('hidden');
+      document.getElementById('code-modal').classList.add('flex');
+
+      let serverUrl = window.location.origin;
+      try {
+        const res = await fetch('/api/v1/deploy/info');
+        if (res.ok) {
+          const d = await res.json();
+          if (d.server_url) serverUrl = d.server_url;
+        }
+      } catch (_) {}
+
+      const instructions = [
+        "================================================================================",
+        " SKĄD WZIĄĆ AGENTA? (1 PLIK, ZERO ZALEŻNOŚCI - NIE WYMAGA PIP INSTALL!)",
+        "================================================================================",
+        "Cały Agent dla Windows oraz Linux mieści się w pojedynczym pliku: agent_poc.py",
+        "Używa wyłącznie biblioteki standardowej Pythona (winreg, ctypes, urllib.request).",
+        "",
+        `  -> Pobierz bezpośrednio z przeglądarki:  ${serverUrl}/api/v1/deploy/agent.py`,
+        "  -> Lub skopiuj plik z folderu projektu:  c:\\Users\\horganisciak\\Desktop\\SystemAuditor\\agent_poc.py",
+        "",
+        "================================================================================",
+        " OPCJA 1: NAJPROSTSZE URUCHOMIENIE (1 KOMENDA NA DOWOLNYM SERWERZE)",
+        "================================================================================",
+        "Na serwerze LINUX (Debian / Ubuntu / RHEL) — pobiera i od razu wykonuje skan:",
+        "",
+        `  curl -fsSL ${serverUrl}/api/v1/deploy/agent.py | sudo python3 - --server ${serverUrl}`,
+        "",
+        "Na serwerze WINDOWS (PowerShell jako Administrator) — pobiera i wykonuje skan:",
+        "",
+        `  Invoke-WebRequest ${serverUrl}/api/v1/deploy/agent.py -OutFile agent_poc.py; python agent_poc.py --server ${serverUrl}`,
+        "",
+        "================================================================================",
+        " OPCJA 2: PEŁNA INSTALACJA USŁUGI W TLE (SYSTEMD / HARMONOGRAM ZADAŃ CO 5 MIN)",
+        "================================================================================",
+        "Linux (instaluje usługę systemd system-auditor-agent.service):",
+        `  curl -fsSL ${serverUrl}/api/v1/deploy/install.sh | sudo bash`,
+        "",
+        "Windows (rejestruje zadanie NT AUTHORITY\\SYSTEM wykonywane co 5 minut):",
+        `  irm ${serverUrl}/api/v1/deploy/install.ps1 | iex`,
+        "",
+        "================================================================================",
+        " OPCJA 3: RĘCZNE URUCHOMIENIE SKOPIOWANEGO PLIKU agent_poc.py",
+        "================================================================================",
+        "  # Pojedynczy skan i wysyłka raportu do serwera:",
+        `  python agent_poc.py --server ${serverUrl}`,
+        "",
+        "  # Ciągła praca w tle (wysyłka raportu co 300 sekund):",
+        `  python agent_poc.py --server ${serverUrl} --daemon --interval 300`,
+        "",
+        "  # Kompilacja do samodzielnego pliku .EXE (gdy na serwerze nie ma Pythona):",
+        "  pip install pyinstaller && pyinstaller --onefile --name system-auditor-agent agent_poc.py"
+      ].join("\n");
+
+      document.getElementById('modal-content').textContent = instructions;
+    }
+
+    async function openPolicyModal() {
+      const res = await fetch('/api/v1/policies/current');
+      const data = await res.json();
+      document.getElementById('modal-title').textContent = 'Podpisany Katalog Reguł CIS (Ed25519 Signed Policy JSON/YAML)';
+      document.getElementById('modal-content').textContent = JSON.stringify(data, null, 2);
+      document.getElementById('code-modal').classList.remove('hidden');
+      document.getElementById('code-modal').classList.add('flex');
+    }
+
+    async function openSqlModal() {
+      const res = await fetch('/api/v1/schema/timescaledb');
+      const data = await res.json();
+      document.getElementById('modal-title').textContent = 'Produkcyjny Schemat PostgreSQL 16 + TimescaleDB (Hypertables + Immutable Trigger)';
+      document.getElementById('modal-content').textContent = data.sql;
+      document.getElementById('code-modal').classList.remove('hidden');
+      document.getElementById('code-modal').classList.add('flex');
+    }
+
+    function closeModal() {
+      document.getElementById('code-modal').classList.add('hidden');
+      document.getElementById('code-modal').classList.remove('flex');
+    }
+
+    function exportCurrentReportJson() {
+      if (!currentAgentReport) return;
+      const blob = new Blob([JSON.stringify(currentAgentReport, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit-report-${currentAgentReport.agent.hostname}.json`;
+      a.click();
+    }
+
+    // =====================================================================
+    // MODUŁ 1: GENERATOR SKRYPTÓW AUTO-REMEDIACJI (.ps1 / .sh / Ansible)
+    // =====================================================================
+    let currentRemediationData = null;
+
+    async function openRemediationModal(format = 'auto') {
+      if (!selectedAgentId) return;
+      const modal = document.getElementById('remediation-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      document.getElementById('remediation-modal-content').textContent = 'Generowanie skryptu naprawczego CIS z obsługą -DryRun oraz -Rollback...';
+
+      const res = await fetch(`/api/v1/agents/${encodeURIComponent(selectedAgentId)}/remediation-script?format=${encodeURIComponent(format)}`);
+      if (!res.ok) {
+        document.getElementById('remediation-modal-content').textContent = 'Błąd podczas generowania skryptu naprawczego.';
+        return;
+      }
+      currentRemediationData = await res.json();
+      document.getElementById('remediation-modal-title').textContent =
+        `Skrypt Auto-Remediacji: ${currentRemediationData.filename} (${currentRemediationData.failed_rules_count} niezgodności FAIL)`;
+      document.getElementById('remediation-modal-content').textContent = currentRemediationData.script;
+    }
+
+    function closeRemediationModal() {
+      const modal = document.getElementById('remediation-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function downloadRemediationFile() {
+      if (!currentRemediationData) return;
+      const blob = new Blob([currentRemediationData.script], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = currentRemediationData.filename;
+      a.click();
+    }
+
+    // =====================================================================
+    // MODUŁ 2: HISTORIA ZMIAN & DETEKTOR DRYFTU KONFIGURACJI (DIFF VIEWER)
+    // =====================================================================
+    async function toggleDriftPanel() {
+      const panel = document.getElementById('host-drift-panel');
+      if (!panel) return;
+      const isHidden = panel.classList.contains('hidden');
+      if (isHidden) {
+        panel.classList.remove('hidden');
+        if (selectedAgentId) await loadHostDriftData(selectedAgentId);
+      } else {
+        panel.classList.add('hidden');
+      }
+    }
+
+    async function loadHostDriftData(agentId, oldRepId = '', newRepId = '') {
+      let url = `/api/v1/agents/${encodeURIComponent(agentId)}/drift`;
+      if (oldRepId && newRepId) {
+        url += `?old_report_id=${encodeURIComponent(oldRepId)}&new_report_id=${encodeURIComponent(newRepId)}`;
+      }
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const data = await res.json();
+
+      // Renderuj pigułki osi czasu
+      const pillsBox = document.getElementById('drift-timeline-pills');
+      pillsBox.innerHTML = (data.timeline || []).map((rep, idx) => {
+        const sc = rep.posture_score;
+        const col = sc >= 80 ? 'border-emerald-500/40 text-emerald-300 bg-emerald-950/40' : (sc >= 50 ? 'border-amber-500/40 text-amber-300 bg-amber-950/40' : 'border-rose-500/40 text-rose-300 bg-rose-950/40');
+        return `
+          <div class="px-2.5 py-1 rounded-lg border text-[11px] mono ${col}">
+            <span class="font-bold">#${idx + 1}</span> ${(rep.ingested_at_utc || '').slice(11, 19)} UTC — <strong>${sc}%</strong> (${rep.pass_count}P/${rep.fail_count}F)
+          </div>
+        `;
+      }).join('<span class="text-slate-600 font-bold">→</span>');
+
+      const diff = data.diff;
+      const summaryBar = document.getElementById('drift-summary-bar');
+      const tbody = document.getElementById('drift-diff-tbody');
+
+      if (!diff) {
+        summaryBar.innerHTML = '<span class="text-slate-400">Brak wystarczającej liczby skanów do porównania. Kliknij „Symuluj Dryft Konfiguracji”, aby przetestować Diff Viewer!</span>';
+        tbody.innerHTML = '';
+        return;
+      }
+
+      const deltaSign = diff.score_delta > 0 ? `+${diff.score_delta}%` : `${diff.score_delta}%`;
+      const deltaCol = diff.score_delta > 0 ? 'text-emerald-400' : (diff.score_delta < 0 ? 'text-rose-400' : 'text-slate-300');
+
+      summaryBar.innerHTML = `
+        <div>
+          <span class="text-slate-400">Porównanie skanów:</span>
+          <code class="text-slate-300 ml-1">${(diff.old_report.ingested_at_utc || '').slice(11, 19)} (${diff.old_report.posture_score}%)</code>
+          <span class="text-cyan-400 mx-1">➔</span>
+          <code class="text-white font-bold">${(diff.new_report.ingested_at_utc || '').slice(11, 19)} (${diff.new_report.posture_score}%)</code>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="font-extrabold ${deltaCol}">Zmiana wyniku: ${deltaSign}</span>
+          <span class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold">Regresje (PASS→FAIL): ${diff.regressions_count}</span>
+          <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">Naprawy (FAIL→PASS): ${diff.remediations_count}</span>
+        </div>
+      `;
+
+      tbody.innerHTML = (diff.items || []).map(item => {
+        let badge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400">BEZ ZMIAN</span>';
+        let rowBg = '';
+        if (item.change_type === 'REGRESSION') {
+          badge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/25 text-rose-300 border border-rose-500/50">⚠️ REGRESJA (PASS → FAIL)</span>';
+          rowBg = 'bg-rose-950/25';
+        } else if (item.change_type === 'REMEDIATED') {
+          badge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/25 text-emerald-300 border border-emerald-500/50">✅ NAPRAWIONO (FAIL → PASS)</span>';
+          rowBg = 'bg-emerald-950/25';
+        } else if (item.change_type === 'VALUE_DRIFT') {
+          badge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/25 text-amber-300 border border-amber-500/50">🔄 ZMIANA WARTOŚCI</span>';
+          rowBg = 'bg-amber-950/20';
+        }
+        return `
+          <tr class="${rowBg} hover:bg-slate-900/50 transition">
+            <td class="py-2 px-3">
+              <div class="font-bold text-white mono">${escapeHtml(item.rule_id)}</div>
+              <div class="text-[11px] text-slate-400">${escapeHtml(item.title)}</div>
+            </td>
+            <td class="py-2 px-3 whitespace-nowrap">${badge}</td>
+            <td class="py-2 px-3 mono text-[11px] text-slate-400">
+              <div>Status: <b>${escapeHtml(item.old_status)}</b></div>
+              <div class="truncate max-w-[200px]">${escapeHtml(JSON.stringify(item.old_value))}</div>
+            </td>
+            <td class="py-2 px-3 mono text-[11px] text-cyan-300">
+              <div>Status: <b>${escapeHtml(item.new_status)}</b></div>
+              <div class="truncate max-w-[200px]">${escapeHtml(JSON.stringify(item.new_value))}</div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function simulateHostDrift() {
+      if (!selectedAgentId) return;
+      const res = await fetch(`/api/v1/agents/${encodeURIComponent(selectedAgentId)}/simulate-drift`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        await fetchOverview();
+        await loadHostDriftData(selectedAgentId);
+      }
+    }
+
+    // =====================================================================
+    // MODUŁ 3: RAPORT AUDYTOWY PDF / HTML (NIS2 / ISO 27001 / CIS)
+    // =====================================================================
+    function openExecutiveReport(agentId = null) {
+      const url = agentId
+        ? `/api/v1/reports/executive-html?agent_id=${encodeURIComponent(agentId)}`
+        : '/api/v1/reports/executive-html';
+      window.open(url, '_blank');
+    }
+
+    // =====================================================================
+    // MODUŁ 4: ALERTY SOC & WEBHOOKI (SLACK / TEAMS / SIEM)
+    // =====================================================================
+    async function fetchWebhookChannels() {
+      const res = await fetch('/api/v1/alerts/channels');
+      if (!res.ok) return;
+      const data = await res.json();
+
+      const tbody = document.getElementById('webhooks-tbody');
+      if (tbody) {
+        tbody.innerHTML = (data.channels || []).map(ch => `
+          <tr class="hover:bg-slate-900/60 transition">
+            <td class="py-3 px-4">
+              <div class="font-bold text-white">${escapeHtml(ch.name)}</div>
+              <div class="text-[11px] text-slate-400 mono truncate max-w-[260px]">${escapeHtml(ch.target_url)}</div>
+            </td>
+            <td class="py-3 px-4">
+              <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 mono">${escapeHtml(ch.provider)}</span>
+            </td>
+            <td class="py-3 px-4 text-[11px] text-slate-300">
+              <div>Wynik &lt; <strong class="text-amber-300">${ch.score_threshold}%</strong> | Min: <b>${escapeHtml(ch.min_severity)}</b></div>
+              <div class="text-[10px] text-slate-400">Dryft: ${ch.trigger_on_drift ? 'TAK' : 'NIE'} • Poisoning: ${ch.trigger_on_poisoning ? 'TAK' : 'NIE'}</div>
+            </td>
+            <td class="py-3 px-4 text-right whitespace-nowrap space-x-1.5">
+              <button onclick="triggerTestWebhookDispatch('${ch.channel_id}')" class="px-2.5 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold transition">
+                Wyślij Test
+              </button>
+              <button onclick="deleteWebhookChannel('${ch.channel_id}')" class="px-2.5 py-1 rounded bg-rose-950/70 hover:bg-rose-900 text-rose-300 border border-rose-700/50 text-[11px] font-medium transition">
+                Usuń
+              </button>
+            </td>
+          </tr>
+        `).join('');
+      }
+
+      const delivBox = document.getElementById('webhook-deliveries-list');
+      if (delivBox) {
+        const deliveries = data.deliveries || [];
+        if (deliveries.length === 0) {
+          delivBox.innerHTML = '<div class="text-xs text-slate-500 py-6 text-center">Brak wysłanych powiadomień. Kliknij „Wyślij Testowy Alert Krytyczny” lub zasymuluj Dryft Konfiguracji!</div>';
+        } else {
+          delivBox.innerHTML = deliveries.map(d => `
+            <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
+              <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-rose-500/20 text-rose-300 border border-rose-500/40">${escapeHtml(d.event_trigger)}</span>
+                  <span class="font-bold text-white">${escapeHtml(d.channel_name)}</span>
+                  <span class="text-[10px] mono text-cyan-400">[${escapeHtml(d.provider)}]</span>
+                </div>
+                <div class="text-[11px] mono text-emerald-400">${escapeHtml(d.delivery_status)} • ${(d.timestamp_utc || '').slice(11, 19)} UTC</div>
+              </div>
+              <pre class="p-2.5 rounded bg-slate-950 border border-slate-800 text-[11px] text-cyan-200 mono overflow-x-auto max-h-[160px]">${escapeHtml(JSON.stringify(d.payload, null, 2))}</pre>
+            </div>
+          `).join('');
+        }
+      }
+    }
+
+    async function handleCreateWebhookChannel(e) {
+      e.preventDefault();
+      const payload = {
+        name: document.getElementById('wh-name').value.trim(),
+        provider: document.getElementById('wh-provider').value,
+        target_url: document.getElementById('wh-url').value.trim(),
+        score_threshold: parseFloat(document.getElementById('wh-threshold').value || '70'),
+        min_severity: 'HIGH',
+        trigger_on_drift: true,
+        trigger_on_poisoning: true
+      };
+      const res = await fetch('/api/v1/alerts/channels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        document.getElementById('wh-name').value = '';
+        document.getElementById('wh-url').value = '';
+        await fetchWebhookChannels();
+      }
+    }
+
+    async function deleteWebhookChannel(channelId) {
+      await fetch(`/api/v1/alerts/channels/${encodeURIComponent(channelId)}`, { method: 'DELETE' });
+      await fetchWebhookChannels();
+    }
+
+    async function triggerTestWebhookDispatch(channelId = null) {
+      await fetch('/api/v1/alerts/test-dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel_id: channelId,
+          event_type: 'NIS2_CRITICAL_COMPLIANCE_BREACH',
+          agent_id: selectedAgentId
+        })
+      });
+      await fetchWebhookChannels();
+    }
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function connectWebSocket() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${proto}//${location.host}/api/v1/ws/stream`);
+      ws.onmessage = () => {
+        fetchOverview();
+      };
+      ws.onclose = () => {
+        setTimeout(connectWebSocket, 3000);
+      };
+    }
+
+    function initAppSession() {
+      refreshBootstrapStatus();
+      try {
+        const saved = sessionStorage.getItem('sa_session');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.token && parsed.user) {
+            completeLoginSession(parsed.token, parsed.user);
+          }
+        }
+      } catch (_) {}
+      fetchOverview();
+      connectWebSocket();
+    }
+
+    initAppSession();
+  </script>
+</body>
+</html>

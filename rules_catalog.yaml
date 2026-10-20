@@ -1,0 +1,624 @@
+# ==============================================================================
+# SystemAuditor Enterprise — Katalog Reguł Bezpieczeństwa (CIS Benchmark L1/L2)
+# ==============================================================================
+# Zasada Zero-Trust:
+# 1. Reguły są w 100% DEKLARATYWNE — brak wykonywania skryptów powłoki (No RCE).
+# 2. Cały katalog jest podpisywany kryptograficznie kluczem prywatnym Ed25519
+#    serwera centralnego (lub Offline Master Key). Agent weryfikuje podpis przed
+#    uruchomieniem kolektorów.
+# ==============================================================================
+
+policy_metadata:
+  policy_id: "pol-cis-enterprise-2026-10"
+  version: "2026.10.3"
+  name: "Enterprise CIS Benchmark L1/L2 + NIS2 & ISO 27001:2022 Baseline (Windows & Linux)"
+  author: "Principal Security Architecture Team"
+  published_at: "2026-10-17T22:00:00Z"
+  signature_ed25519: "auto-signed-by-pki-engine"
+
+rules:
+  # ============================================================================
+  # WINDOWS CIS BENCHMARK & ATTACK SURFACE RULES (12 KOMPLETNYCH REGUŁ)
+  # ============================================================================
+
+  - rule_id: "WIN-CIS-18.3.1"
+    os_family: "windows"
+    category: "Network Security"
+    title: "Ensure SMBv1 Server protocol is disabled"
+    benchmark_ref: "CIS Microsoft Windows Server 2022 Benchmark v3.0.0 - 18.3.1"
+    mitre_attack: ["T1210", "T1021.002"]
+    compliance_frameworks:
+      iso27001: "A.8.20 (Bezpieczeństwo sieci)"
+      nis2: "Art. 21 ust. 2 lit. e (Bezpieczeństwo sieci i systemów)"
+      ksc: "Zał. 1 pkt 14 (Ochrona usług sieciowych)"
+    risk_severity: "CRITICAL"
+    cvss_base_score: 9.8
+    description: >
+      Protokół SMBv1 jest przestarzały i podatny na krytyczne ataki zdalnego wykonania
+      kodu (np. EternalBlue / WannaCry / NotPetya). Musi być bezwzględnie wyłączony.
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters'
+      value_name: "SMB1"
+    expected_state:
+      operator: "in_set"
+      allowed_values: [0, null]
+      expected_reg_type: "REG_DWORD"
+    remediation: >
+      Uruchom PowerShell jako Administrator:
+      Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force
+      Lub ustaw klucz HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters\SMB1 (DWORD) = 0.
+
+  - rule_id: "WIN-CIS-2.3.17.1"
+    os_family: "windows"
+    category: "Privilege Escalation"
+    title: "Ensure 'User Account Control: Run all administrators in Admin Approval Mode' is Enabled"
+    benchmark_ref: "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0 - 2.3.17.1"
+    mitre_attack: ["T1548.002"]
+    compliance_frameworks:
+      iso27001: "A.8.2 (Prawa dostępu uprzywilejowanego)"
+      nis2: "Art. 21 ust. 2 lit. i (Kontrola dostępu i zarządzanie zasobami)"
+      ksc: "Zał. 1 pkt 7 (Zarządzanie uprawnieniami administracyjnymi)"
+    risk_severity: "HIGH"
+    cvss_base_score: 7.8
+    description: >
+      Kontrola konta użytkownika (UAC / EnableLUA) wymusza zatwierdzanie operacji
+      wymagających podwyższonych uprawnień (split-token dla administratorów).
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+      value_name: "EnableLUA"
+    expected_state:
+      operator: "equals"
+      value: 1
+      expected_reg_type: "REG_DWORD"
+    remediation: >
+      Ustaw wartość rejestru HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\EnableLUA = 1
+      i uruchom ponownie system.
+
+  - rule_id: "WIN-CIS-1.1.1"
+    os_family: "windows"
+    category: "Password & Account Policies"
+    title: "Ensure 'Minimum password length' is set to 14 or more characters"
+    benchmark_ref: "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0 - 1.1.1"
+    mitre_attack: ["T1110.001", "T1110.002"]
+    compliance_frameworks:
+      iso27001: "A.5.17 (Informacje uwierzytelniające)"
+      nis2: "Art. 21 ust. 2 lit. j (Uwierzytelnianie i higiena poświadczeń)"
+      ksc: "Zał. 1 pkt 8 (Polityka haseł i uwierzytelniania)"
+    risk_severity: "HIGH"
+    cvss_base_score: 7.5
+    description: >
+      Krótkie hasła są podatne na łamanie metodą brute-force z użyciem akceleracji GPU
+      w przypadku przejęcia skrótów NTLM.
+    collector:
+      type: "windows_security_policy"
+      section: "System Access"
+      parameter: "MinimumPasswordLength"
+    expected_state:
+      operator: "greater_than_or_equal"
+      value: 14
+      unit: "characters"
+    remediation: >
+      W GPO: Computer Configuration -> Policies -> Windows Settings -> Security Settings ->
+      Account Policies -> Password Policy -> Minimum password length ustaw na minimum 14 znaków
+      (lub wykonaj: net accounts /minpwlen:14).
+
+  - rule_id: "WIN-CIS-9.1.1"
+    os_family: "windows"
+    category: "Host Firewall & Endpoint Protection"
+    title: "Ensure 'Windows Defender Firewall: Domain/Standard Profile: Firewall state' is set to 'On'"
+    benchmark_ref: "CIS Microsoft Windows Server 2022 Benchmark v3.0.0 - 9.1.1"
+    mitre_attack: ["T1562.004"]
+    compliance_frameworks:
+      iso27001: "A.8.21 (Bezpieczeństwo usług sieciowych)"
+      nis2: "Art. 21 ust. 2 lit. e (Segmentacja i ochrona brzegu hosta)"
+      ksc: "Zał. 1 pkt 15 (Filtrowanie ruchu sieciowego)"
+    risk_severity: "HIGH"
+    cvss_base_score: 8.1
+    description: >
+      Zapora systemowa Windows Defender Firewall filtruje ruch przychodzący i wychodzący,
+      ograniczając ruch boczny (Lateral Movement) wewnątrz sieci korporacyjnej.
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile'
+      value_name: "EnableFirewall"
+    expected_state:
+      operator: "equals"
+      value: 1
+      expected_reg_type: "REG_DWORD"
+    remediation: >
+      Włącz zaporę systemową poleceniem:
+      Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
+
+  - rule_id: "WIN-CIS-18.4.2"
+    os_family: "windows"
+    category: "Credential Protection"
+    title: "Ensure 'WDigest Authentication' is disabled (UseLogonCredential = 0)"
+    benchmark_ref: "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0 - 18.4.2"
+    mitre_attack: ["T1003.001"]
+    compliance_frameworks:
+      iso27001: "A.8.9 (Zarządzanie konfiguracją ochronną)"
+      nis2: "Art. 21 ust. 2 lit. g (Podstawowe praktyki cyberhigieny)"
+      ksc: "Zał. 1 pkt 9 (Ochrona poświadczeń w pamięci operacyjnej)"
+    risk_severity: "CRITICAL"
+    cvss_base_score: 9.1
+    description: >
+      Gdy protokół WDigest ma włączoną opcję UseLogonCredential=1, proces LSASS przechowuje
+      hasła użytkowników w pamięci RAM w postaci jawnego tekstu (cleartext), co umożliwia
+      natychmiastową kradzież poświadczeń narzędziami typu Mimikatz.
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest'
+      value_name: "UseLogonCredential"
+    expected_state:
+      operator: "in_set"
+      allowed_values: [0, null]
+      expected_reg_type: "REG_DWORD"
+    remediation: >
+      Ustaw wartość rejestru HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest\UseLogonCredential = 0.
+
+  - rule_id: "WIN-CIS-2.3.11.7"
+    os_family: "windows"
+    category: "Credential Protection"
+    title: "Ensure 'Network security: LAN Manager authentication level' is set to 'Send NTLMv2 response only. Refuse LM & NTLM'"
+    benchmark_ref: "CIS Microsoft Windows Server 2022 Benchmark v3.0.0 - 2.3.11.7"
+    mitre_attack: ["T1557.001", "T1110"]
+    compliance_frameworks:
+      iso27001: "A.8.24 (Stosowanie kryptografii)"
+      nis2: "Art. 21 ust. 2 lit. h (Polityki stosowania kryptografii)"
+      ksc: "Zał. 1 pkt 12 (Kryptograficzna ochrona uwierzytelniania)"
+    risk_severity: "HIGH"
+    cvss_base_score: 8.2
+    description: >
+      Starsze protokoły LM oraz NTLMv1 wykorzystują słabą kryptografię DES/MD4 i mogą zostać
+      złamane w kilka sekund. Poziom 5 wymusza wyłącznie NTLMv2 oraz odrzuca LM/NTLMv1.
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SYSTEM\CurrentControlSet\Control\Lsa'
+      value_name: "LmCompatibilityLevel"
+    expected_state:
+      operator: "equals"
+      value: 5
+      expected_reg_type: "REG_DWORD"
+    remediation: >
+      Ustaw klucz HKLM\SYSTEM\CurrentControlSet\Control\Lsa\LmCompatibilityLevel (DWORD) = 5.
+
+  - rule_id: "WIN-CIS-18.9.47.1"
+    os_family: "windows"
+    category: "Credential Protection"
+    title: "Ensure LSASS runs as a Protected Process Light (RunAsPPL = 1 or 2)"
+    benchmark_ref: "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0 - 18.9.47.1"
+    mitre_attack: ["T1003.001"]
+    compliance_frameworks:
+      iso27001: "A.8.7 (Ochrona przed złośliwym oprogramowaniem i kradzieżą pamięci)"
+      nis2: "Art. 21 ust. 2 lit. e (Bezpieczeństwo punktów końcowych)"
+      ksc: "Zał. 1 pkt 9 (Izolacja procesów bezpieczeństwa LSASS)"
+    risk_severity: "HIGH"
+    cvss_base_score: 8.6
+    description: >
+      Uruchomienie procesu LSASS w trybie Protected Process Light (RunAsPPL) uniemożliwia
+      niechronionym procesom (nawet z uprawnieniami Administratora) odczyt pamięci lsass.exe.
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SYSTEM\CurrentControlSet\Control\Lsa'
+      value_name: "RunAsPPL"
+    expected_state:
+      operator: "in_set"
+      allowed_values: [1, 2]
+      expected_reg_type: "REG_DWORD"
+    remediation: >
+      Ustaw wartość rejestru HKLM\SYSTEM\CurrentControlSet\Control\Lsa\RunAsPPL (DWORD) = 1.
+
+  - rule_id: "WIN-CIS-18.10.57.1"
+    os_family: "windows"
+    category: "Audit & Logging"
+    title: "Ensure 'Turn on PowerShell Script Block Logging' is set to 'Enabled'"
+    benchmark_ref: "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0 - 18.10.57.1"
+    mitre_attack: ["T1059.001"]
+    compliance_frameworks:
+      iso27001: "A.8.15 (Rejestrowanie zdarzeń / Logging)"
+      nis2: "Art. 21 ust. 2 lit. b (Wykrywanie i obsługa incydentów)"
+      ksc: "Zał. 1 pkt 18 (Monitorowanie i rejestrowanie aktywności skryptowej)"
+    risk_severity: "MEDIUM"
+    cvss_base_score: 6.5
+    description: >
+      Logowanie bloków skryptów PowerShell (Event ID 4104) zapisuje pełną, zdekodowaną treść
+      wykonywanych poleceń PowerShell, co jest kluczowe do wykrywania ataków bezplikowych.
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging'
+      value_name: "EnableScriptBlockLogging"
+    expected_state:
+      operator: "equals"
+      value: 1
+      expected_reg_type: "REG_DWORD"
+    remediation: >
+      Włącz GPO: Administrative Templates -> Windows Components -> Windows PowerShell ->
+      Turn on PowerShell Script Block Logging (EnableScriptBlockLogging = 1).
+
+  - rule_id: "WIN-CIS-2.3.1.2"
+    os_family: "windows"
+    category: "Password & Account Policies"
+    title: "Ensure 'Accounts: Guest account status' is set to 'Disabled'"
+    benchmark_ref: "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0 - 2.3.1.2"
+    mitre_attack: ["T1078.001"]
+    compliance_frameworks:
+      iso27001: "A.5.16 (Zarządzanie tożsamością i kontami domyślnymi)"
+      nis2: "Art. 21 ust. 2 lit. i (Kontrola dostępu)"
+      ksc: "Zał. 1 pkt 6 (Blokada kont anonimowych i gościnnych)"
+    risk_severity: "HIGH"
+    cvss_base_score: 7.4
+    description: >
+      Aktywne wbudowane konto Gościa (Guest) umożliwia dostęp do zasobów systemu bez
+      indywidualnego uwierzytelniania i ułatwia rekonesans środowiska lokalnego.
+    collector:
+      type: "windows_sam_account"
+      account_name: "Guest"
+    expected_state:
+      operator: "equals"
+      value: 0
+    remediation: >
+      Wyłącz konto Gościa w PowerShell: Disable-LocalUser -Name "Guest"
+      (lub wykonaj: net user Guest /active:no).
+
+  - rule_id: "WIN-CIS-18.9.102.2"
+    os_family: "windows"
+    category: "Remote Access & RDP Hardening"
+    title: "Ensure 'Require user authentication for remote connections by using Network Level Authentication (RDP NLA)' is Enabled"
+    benchmark_ref: "CIS Microsoft Windows Server 2022 Benchmark v3.0.0 - 18.9.102.2"
+    mitre_attack: ["T1021.001", "T1110"]
+    compliance_frameworks:
+      iso27001: "A.8.5 (Bezpieczne uwierzytelnianie zdalne)"
+      nis2: "Art. 21 ust. 2 lit. j (Bezpieczny dostęp zdalny)"
+      ksc: "Zał. 1 pkt 11 (Ochrona sesji zdalnych RDP)"
+    risk_severity: "HIGH"
+    cvss_base_score: 8.4
+    description: >
+      Network Level Authentication (NLA) wymusza uwierzytelnienie użytkownika przed zestawieniem
+      pełnej sesji graficznej RDP, chroniąc przed atakami typu Pre-Auth RCE (np. BlueKeep) i wyczerpaniem zasobów.
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
+      value_name: "UserAuthentication"
+    expected_state:
+      operator: "equals"
+      value: 1
+      expected_reg_type: "REG_DWORD"
+    remediation: >
+      Ustaw klucz HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp\UserAuthentication (DWORD) = 1.
+
+  - rule_id: "WIN-CIS-18.9.10.1"
+    os_family: "windows"
+    category: "Hardware & Boot Integrity"
+    title: "Ensure UEFI Secure Boot is enabled to prevent bootkit/rootkit execution"
+    benchmark_ref: "CIS Microsoft Windows 11 Enterprise Benchmark v3.0.0 - 18.9.10.1"
+    mitre_attack: ["T1542.003"]
+    compliance_frameworks:
+      iso27001: "A.8.9 (Integralność rozruchu platformy sprzętowej)"
+      nis2: "Art. 21 ust. 2 lit. e (Integralność systemu operacyjnego)"
+      ksc: "Zał. 1 pkt 4 (Weryfikacja podpisu kryptograficznego bootloadera)"
+    risk_severity: "HIGH"
+    cvss_base_score: 7.9
+    description: >
+      UEFI Secure Boot weryfikuje podpisy kryptograficzne programu rozruchowego (Bootloader)
+      oraz sterowników jądra podczas startu maszyny, blokując rootkity typu BlackLotus.
+    collector:
+      type: "windows_registry"
+      hive: "HKEY_LOCAL_MACHINE"
+      key_path: 'SYSTEM\CurrentControlSet\Control\SecureBoot\State'
+      value_name: "UEFISecureBootEnabled"
+    expected_state:
+      operator: "equals"
+      value: 1
+      expected_reg_type: "REG_DWORD"
+    remediation: >
+      Włącz opcję Secure Boot w ustawieniach firmware UEFI/BIOS płyty głównej oraz upewnij się,
+      że system korzysta z partycjonowania GPT.
+
+  - rule_id: "WIN-NET-SURFACE-01"
+    os_family: "windows"
+    category: "Network Attack Surface"
+    title: "Ensure no high-risk cleartext or legacy TCP ports are listening (Telnet/23, FTP/21, RSH/514, TFTP/69)"
+    benchmark_ref: "CIS Microsoft Windows Benchmark v3.0.0 - Section 9 / Network Surface"
+    mitre_attack: ["T1046", "T1021"]
+    compliance_frameworks:
+      iso27001: "A.8.20 (Minimalizacja powierzchni ataku sieciowego)"
+      nis2: "Art. 21 ust. 2 lit. e (Higiena ekspozycji portów sieciowych)"
+      ksc: "Zał. 1 pkt 14 (Wyłączenie niezabezpieczonych protokołów)"
+    risk_severity: "CRITICAL"
+    cvss_base_score: 9.0
+    description: >
+      Nasłuchiwanie na portach nieszyfrowanych usług (Telnet 23, FTP 21, Rlogin 513, RSH 514)
+      wystawia hosta na podsłuch poświadczeń oraz bezpośrednie zdalne przejęcie powłoki.
+    collector:
+      type: "network_listening_ports"
+      forbidden_ports: [21, 23, 69, 513, 514]
+    expected_state:
+      operator: "equals"
+      value: 0
+    remediation: >
+      Zatrzymaj i odinstaluj usługi nasłuchujące na niebezpiecznych portach (Telnet Server, FTP Server)
+      oraz zablokuj te porty na zaporze: New-NetFirewallRule -DisplayName "Block Legacy Ports" -Direction Inbound -LocalPort 21,23,69,513,514 -Protocol TCP -Action Block.
+
+  # ============================================================================
+  # LINUX (DEBIAN / UBUNTU) CIS BENCHMARK & ATTACK SURFACE RULES (10 REGUŁ)
+  # ============================================================================
+
+  - rule_id: "LNX-CIS-5.2.8"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "SSH Hardening"
+    title: "Ensure SSH root login is disabled"
+    benchmark_ref: "CIS Ubuntu Linux 24.04 LTS Benchmark v1.0.0 - 5.2.8"
+    mitre_attack: ["T1078.003", "T1021.004"]
+    compliance_frameworks:
+      iso27001: "A.8.2 (Prawa dostępu uprzywilejowanego)"
+      nis2: "Art. 21 ust. 2 lit. i (Kontrola dostępu uprzywilejowanego)"
+      ksc: "Zał. 1 pkt 7 (Rozliczalność działań administratorów)"
+    risk_severity: "CRITICAL"
+    cvss_base_score: 9.0
+    description: >
+      Logowanie bezpośrednio na konto root przez SSH uniemożliwia rozliczalność działań
+      poszczególnych administratorów i wystawia konto o najwyższych uprawnieniach na brute-force.
+    collector:
+      type: "linux_sshd_effective_config"
+      binary_path: "/usr/sbin/sshd"
+      args: ["-T"]
+      config_path: "/etc/ssh/sshd_config"
+      directive: "permitrootlogin"
+    expected_state:
+      operator: "equals"
+      value: "no"
+      case_sensitive: false
+    remediation: >
+      W pliku /etc/ssh/sshd_config ustaw: PermitRootLogin no
+      Następnie wykonaj: systemctl reload sshd
+
+  - rule_id: "LNX-CIS-3.1.1"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Kernel Network Hardening"
+    title: "Ensure IPv4 packet forwarding is disabled"
+    benchmark_ref: "CIS Debian Linux 12 Benchmark v1.0.0 - 3.1.1"
+    mitre_attack: ["T1090"]
+    compliance_frameworks:
+      iso27001: "A.8.20 (Bezpieczeństwo sieci)"
+      nis2: "Art. 21 ust. 2 lit. e (Zapobieganie nieautoryzowanemu routingowi)"
+      ksc: "Zał. 1 pkt 14 (Izolacja segmentów sieciowych)"
+    risk_severity: "MEDIUM"
+    cvss_base_score: 6.1
+    description: >
+      Serwery niebędące dedykowanymi routerami nie powinny przekazywać pakietów IP pomiędzy
+      interfejsami sieciowymi, aby zapobiec wykorzystaniu hosta jako węzła pivotującego.
+    collector:
+      type: "linux_proc_sysctl"
+      sysctl_keys:
+        - "net.ipv4.ip_forward"
+    expected_state:
+      operator: "equals"
+      value: 0
+    remediation: >
+      Ustaw net.ipv4.ip_forward = 0 w /etc/sysctl.d/60-cis-net.conf oraz wykonaj:
+      sysctl -w net.ipv4.ip_forward=0
+
+  - rule_id: "LNX-CIS-3.3.5"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Kernel Network Hardening"
+    title: "Ensure ICMP redirects are not accepted"
+    benchmark_ref: "CIS Debian Linux 12 Benchmark v1.0.0 - 3.3.5"
+    mitre_attack: ["T1557"]
+    compliance_frameworks:
+      iso27001: "A.8.20 (Ochrona przed manipulacją routingiem ICMP)"
+      nis2: "Art. 21 ust. 2 lit. e (Ochrona komunikacji sieciowej)"
+      ksc: "Zał. 1 pkt 15 (Ochrona przed atakami MitM w sieci LAN)"
+    risk_severity: "MEDIUM"
+    cvss_base_score: 5.9
+    description: >
+      Komunikaty ICMP Redirect mogą zostać wykorzystane przez atakującego w sieci LAN
+      do zmodyfikowania tablic routingu hosta i przeprowadzenia ataku Man-in-the-Middle (MitM).
+    collector:
+      type: "linux_proc_sysctl"
+      sysctl_keys:
+        - "net.ipv4.conf.all.accept_redirects"
+        - "net.ipv4.conf.default.accept_redirects"
+    expected_state:
+      operator: "all_equal"
+      value: 0
+    remediation: >
+      Ustaw net.ipv4.conf.all.accept_redirects=0 oraz net.ipv4.conf.default.accept_redirects=0
+      w /etc/sysctl.d/60-cis-net.conf i przeładuj sysctl --system.
+
+  - rule_id: "LNX-CIS-6.1.10"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Filesystem Integrity & Permissions"
+    title: "Ensure permissions on /etc/shadow are configured (0640 or more restrictive)"
+    benchmark_ref: "CIS Ubuntu Linux 24.04 LTS Benchmark v1.0.0 - 6.1.10"
+    mitre_attack: ["T1003.008"]
+    compliance_frameworks:
+      iso27001: "A.5.17 (Ochrona magazynu skrótów haseł)"
+      nis2: "Art. 21 ust. 2 lit. i (Ochrona poufności poświadczeń)"
+      ksc: "Zał. 1 pkt 9 (Restrykcyjne uprawnienia plików haseł)"
+    risk_severity: "CRITICAL"
+    cvss_base_score: 8.8
+    description: >
+      Plik /etc/shadow zawiera skróty haseł wszystkich kont lokalnych. Odczyt przez nieuprawnionego
+      użytkownika pozwala na przeprowadzenie ataku słownikowego offline (Hashcat / John the Ripper).
+    collector:
+      type: "linux_file_stat"
+      target_path: "/etc/shadow"
+    expected_state:
+      operator: "file_acl_match"
+      expected_uid: 0
+      expected_owner: "root"
+      allowed_groups: ["root", "shadow"]
+      forbidden_mode_bits_octal: "0137"
+    remediation: >
+      Wykonaj: chown root:shadow /etc/shadow && chmod u-x,g-wx,o-rwx /etc/shadow
+
+  - rule_id: "LNX-CIS-1.5.1"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Kernel Memory Protection"
+    title: "Ensure Address Space Layout Randomization (ASLR) is fully enabled (randomize_va_space = 2)"
+    benchmark_ref: "CIS Ubuntu Linux 24.04 LTS Benchmark v1.0.0 - 1.5.1"
+    mitre_attack: ["T1203", "T1068"]
+    compliance_frameworks:
+      iso27001: "A.8.9 (Utwardzanie pamięci jądra systemu)"
+      nis2: "Art. 21 ust. 2 lit. e (Ochrona przed eksploitacją luk pamięci)"
+      ksc: "Zał. 1 pkt 4 (Mechanizmy ochrony przestrzeni adresowej ASLR)"
+    risk_severity: "HIGH"
+    cvss_base_score: 7.8
+    description: >
+      Pełny ASLR (wartość 2) losowo rozmieszcza stos, stertę (heap), biblioteki współdzielone
+      oraz segmenty mmap w przestrzeni adresowej procesu, utrudniając eksploity typu ROP / Buffer Overflow.
+    collector:
+      type: "linux_proc_sysctl"
+      sysctl_keys:
+        - "kernel.randomize_va_space"
+    expected_state:
+      operator: "equals"
+      value: 2
+    remediation: >
+      Ustaw kernel.randomize_va_space = 2 w /etc/sysctl.d/60-kernel_sysctl.conf i wykonaj:
+      sysctl -w kernel.randomize_va_space=2
+
+  - rule_id: "LNX-CIS-4.1.1.1"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Audit & Logging"
+    title: "Ensure auditd service is enabled and active"
+    benchmark_ref: "CIS Debian Linux 12 Benchmark v1.0.0 - 4.1.1.1"
+    mitre_attack: ["T1562.001"]
+    compliance_frameworks:
+      iso27001: "A.8.15 (Rejestrowanie wywołań systemowych i audyt)"
+      nis2: "Art. 21 ust. 2 lit. b (Monitorowanie ciągłe i detekcja incydentów)"
+      ksc: "Zał. 1 pkt 18 (Ciągła rejestracja zdarzeń bezpieczeństwa)"
+    risk_severity: "HIGH"
+    cvss_base_score: 7.4
+    description: >
+      Demon Linux Audit (auditd) odpowiada za rejestrowanie wywołań systemowych jądra,
+      zmian w plikach krytycznych (/etc/passwd, /etc/sudoers) oraz prób eskalacji uprawnień.
+    collector:
+      type: "linux_systemd_service"
+      service_name: "auditd.service"
+    expected_state:
+      operator: "equals"
+      value: "active"
+    remediation: >
+      Zainstaluj i aktywuj usługę: apt install auditd && systemctl --now enable auditd
+
+  - rule_id: "LNX-CIS-6.2.5"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Privilege Escalation"
+    title: "Ensure root is the only UID 0 account in /etc/passwd"
+    benchmark_ref: "CIS Ubuntu Linux 24.04 LTS Benchmark v1.0.0 - 6.2.5"
+    mitre_attack: ["T1136.001", "T1078.003"]
+    compliance_frameworks:
+      iso27001: "A.8.2 (Unikalność konta superużytkownika UID 0)"
+      nis2: "Art. 21 ust. 2 lit. i (Zarządzanie tożsamościami uprzywilejowanymi)"
+      ksc: "Zał. 1 pkt 7 (Wykrywanie ukrytych kont administracyjnych backdoor)"
+    risk_severity: "CRITICAL"
+    cvss_base_score: 9.6
+    description: >
+      Każde konto w pliku /etc/passwd posiadające UID=0 otrzymuje pełne prawa superużytkownika
+      jądra Linux. Obecność dodatkowych kont z UID=0 poza 'root' wskazuje na tylną furtkę (backdoor).
+    collector:
+      type: "linux_passwd_uid0"
+      target_path: "/etc/passwd"
+    expected_state:
+      operator: "equals"
+      value: 0
+    remediation: >
+      Usuń lub zmień UID wszelkich kont innych niż root posiadających UID 0 w pliku /etc/passwd:
+      usermod -u <nowy_uid> <nazwa_konta> lub userdel -r <nazwa_konta>.
+
+  - rule_id: "LNX-CIS-5.3.3"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Privilege Escalation"
+    title: "Ensure sudoers configuration does not allow passwordless privilege escalation (NOPASSWD)"
+    benchmark_ref: "CIS Debian Linux 12 Benchmark v1.0.0 - 5.3.3"
+    mitre_attack: ["T1548.003"]
+    compliance_frameworks:
+      iso27001: "A.8.2 (Weryfikacja tożsamości przy eskalacji uprawnień)"
+      nis2: "Art. 21 ust. 2 lit. i (Kontrola dostępu uprzywilejowanego)"
+      ksc: "Zał. 1 pkt 8 (Wymóg uwierzytelniania przy operacjach administracyjnych)"
+    risk_severity: "HIGH"
+    cvss_base_score: 8.3
+    description: >
+      Dyrektywa NOPASSWD w /etc/sudoers lub /etc/sudoers.d/* pozwala na przejęcie pełnych uprawnień
+      root z poziomu przejętej sesji zwykłego użytkownika bez znajomości hasła.
+    collector:
+      type: "linux_sudoers_nopasswd"
+      target_path: "/etc/sudoers"
+    expected_state:
+      operator: "equals"
+      value: 0
+    remediation: >
+      Edytuj /etc/sudoers za pomocą polecenia visudo oraz pliki w /etc/sudoers.d/ i usuń wszystkie wpisy zawierające tag NOPASSWD.
+
+  - rule_id: "LNX-CIS-1.4.1"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Hardware & Boot Integrity"
+    title: "Ensure bootloader configuration (/boot/grub/grub.cfg) permissions are 0400/0600 root:root"
+    benchmark_ref: "CIS Ubuntu Linux 24.04 LTS Benchmark v1.0.0 - 1.4.1"
+    mitre_attack: ["T1542.003"]
+    compliance_frameworks:
+      iso27001: "A.8.9 (Ochrona parametrów startowych jądra)"
+      nis2: "Art. 21 ust. 2 lit. e (Integralność rozruchu systemu)"
+      ksc: "Zał. 1 pkt 4 (Zabezpieczenie konfiguracji programu rozruchowego GRUB)"
+    risk_severity: "HIGH"
+    cvss_base_score: 7.6
+    description: >
+      Nieodpowiednie uprawnienia pliku /boot/grub/grub.cfg pozwalają lokalnym użytkownikom na odczyt
+      skrótów haseł GRUB lub modyfikację parametrów startowych jądra (np. init=/bin/sh).
+    collector:
+      type: "linux_file_stat"
+      target_path: "/boot/grub/grub.cfg"
+    expected_state:
+      operator: "file_acl_match"
+      expected_uid: 0
+      expected_owner: "root"
+      allowed_groups: ["root"]
+      forbidden_mode_bits_octal: "0177"
+    remediation: >
+      Wykonaj: chown root:root /boot/grub/grub.cfg && chmod u-x,go-rwx /boot/grub/grub.cfg
+
+  - rule_id: "LNX-NET-SURFACE-01"
+    os_family: "linux"
+    os_distro: ["debian", "ubuntu"]
+    category: "Network Attack Surface"
+    title: "Ensure no high-risk cleartext TCP ports are listening (Telnet/23, FTP/21, RSH/514, X11/6000)"
+    benchmark_ref: "CIS Linux Benchmark v1.0.0 - Section 2.1 / Network Surface"
+    mitre_attack: ["T1046", "T1021"]
+    compliance_frameworks:
+      iso27001: "A.8.20 (Minimalizacja powierzchni ataku sieciowego)"
+      nis2: "Art. 21 ust. 2 lit. e (Higiena ekspozycji portów sieciowych)"
+      ksc: "Zał. 1 pkt 14 (Wyłączenie niezabezpieczonych usług sieciowych)"
+    risk_severity: "CRITICAL"
+    cvss_base_score: 9.0
+    description: >
+      Otwarte porty usług nieszyfrowanych w /proc/net/tcp (Telnet 23, FTP 21, Rlogin 513, RSH 514, X11 6000)
+      narażają serwer na przejęcie sesji oraz zdalną eksploitację.
+    collector:
+      type: "network_listening_ports"
+      forbidden_ports: [21, 23, 69, 513, 514, 6000]
+    expected_state:
+      operator: "equals"
+      value: 0
+    remediation: >
+      Wyłącz niebezpieczne demony (systemctl stop telnet.socket vsftpd rsh.socket) oraz zablokuj ruch przychodzący w nftables/ufw.
+
