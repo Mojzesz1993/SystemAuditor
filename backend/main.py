@@ -22,20 +22,37 @@ import hmac
 import json
 import logging
 import os
+import sys
 import uuid
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+# Zapewnienie poprawnej ścieżki sys.path niezależnie od katalogu wywołania (root / backend)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 from fastapi import FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from backend.auth_manager import JWTManager, PasswordHasher, TOTPManager
-from backend.database import AuditDatabase
-from backend.pki_manager import ZeroTrustPKIManager
-from backend.rule_engine import AntiPoisoningDetector, CISRuleEngine
+try:
+    from backend.auth_manager import JWTManager, PasswordHasher, TOTPManager
+    from backend.database import AuditDatabase
+    from backend.pki_manager import ZeroTrustPKIManager
+    from backend.rule_engine import AntiPoisoningDetector, CISRuleEngine
+except ImportError:
+    from auth_manager import JWTManager, PasswordHasher, TOTPManager
+    from database import AuditDatabase
+    from pki_manager import ZeroTrustPKIManager
+    from rule_engine import AntiPoisoningDetector, CISRuleEngine
 
 logging.basicConfig(
     level=logging.INFO,
@@ -3674,6 +3691,37 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         ws_manager.disconnect(websocket)
 
 
+@app.get("/health")
+@app.get("/api/v1/health")
+async def health_check() -> Dict[str, Any]:
+    """Diagnostyczny punkt kontrolny (Health Check) sprawdzający stan bazy, reguł i środowiska OS."""
+    import platform as _plt
+    import sys as _sys
+    db_ok = False
+    try:
+        db.list_agents()
+        db_ok = True
+    except Exception:
+        db_ok = False
+
+    return {
+        "status": "HEALTHY" if db_ok and len(rule_engine.rules_list) > 0 else "DEGRADED",
+        "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "database_connected": db_ok,
+        "rules_catalog": {
+            "loaded": len(rule_engine.rules_list) > 0,
+            "total_rules": len(rule_engine.rules_list),
+            "version": rule_engine.metadata.get("version", "unknown"),
+        },
+        "environment": {
+            "os_family": _plt.system(),
+            "os_release": _plt.release(),
+            "python_version": _sys.version.split()[0],
+            "pid": os.getpid(),
+        },
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard() -> HTMLResponse:
     if FRONTEND_PATH.exists():
@@ -3682,4 +3730,17 @@ async def serve_dashboard() -> HTMLResponse:
             headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
         )
     return HTMLResponse(content="<h1>SystemAuditor Backend Running. Frontend not found.</h1>")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    host = os.environ.get("AUDITOR_HOST", "0.0.0.0")
+    port = int(os.environ.get("AUDITOR_PORT", "8000"))
+    print("=" * 72)
+    print(" SystemAuditor Enterprise — Uruchamianie Serwera Centralnego")
+    print(f" • Nasłuch:       http://{host}:{port}")
+    print(f" • Dashboard WWW: http://localhost:{port}")
+    print(f" • Healthcheck:   http://localhost:{port}/health")
+    print("=" * 72)
+    uvicorn.run("backend.main:app", host=host, port=port, reload=False)
 

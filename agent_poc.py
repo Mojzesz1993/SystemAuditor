@@ -1675,6 +1675,79 @@ def enroll_agent_with_server(server_url: str, enrollment_token: str, agent_id: s
     return True
 
 
+def run_agent_diagnostics(server_url: str) -> int:
+    """Kompleksowa autodiagnostyka agenta z czytelnym podsumowaniem wykrytych błędów."""
+    print("=" * 72)
+    print(" SystemAuditor Enterprise — Autodiagnostyka Agenta Endpoint")
+    print("=" * 72)
+
+    is_elevated = OSParameterCollector.check_elevated_privileges()
+    os_name = platform.system()
+    print("\n[1/5] Środowisko wykonawcze:")
+    print(f"  • System OS:       {os_name} {platform.release()} ({platform.architecture()[0]})")
+    print(f"  • Wersja Python:   {sys.version.split()[0]} ({sys.executable})")
+    print(f"  • Hostname / FQDN: {socket.getfqdn()}")
+    print(f"  • Uprawnienia:     {'ADMINISTRATOR / ROOT (OK)' if is_elevated else 'ZWYKŁY UŻYTKOWNIK (OSTRZEŻENIE)'}")
+
+    if not is_elevated:
+        if os_name.lower() == "windows":
+            print("    ⚠️ UWAGA: Agent nie ma uprawnień Administratora. Niektóre kontrole (BitLocker, NetUser) mogą zwrócić błąd.")
+            print("    💡 Sugestia: Uruchom terminal PowerShell jako Administrator.")
+        else:
+            print("    ⚠️ UWAGA: Agent nie działa jako root (UID != 0). Odczyt /etc/sudoers i /etc/shadow będzie zablokowany.")
+            print("    💡 Sugestia: Uruchom agenta poleceniem: sudo python3 agent_poc.py")
+
+    print("\n[2/5] Obsługa kryptografii:")
+    try:
+        from cryptography import x509
+        print("  • Pakiet 'cryptography': ZAINSTALOWANY (obsługuje mTLS X.509 i CSR ECDSA P-256)")
+    except ImportError:
+        print("  • Pakiet 'cryptography': BRAK (Tryb Zero-Dependency — agent używa natywnego HMAC-SHA256)")
+
+    print(f"\n[3/5] Połączenie z Serwerem Centralnym ({server_url}):")
+    health_url = f"{server_url.rstrip('/')}/health"
+    try:
+        req = urllib.request.Request(health_url, headers={"User-Agent": "SystemAuditor-Diagnostics"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            print(f"  • Status HTTP:     {resp.status} OK")
+            print(f"  • Stan backendu:   {data.get('status')} (Katalog reguł: {data.get('rules_catalog', {}).get('total_rules')} reguł)")
+    except urllib.error.HTTPError as he:
+        print(f"  • Status HTTP:     Błąd {he.code} ({he.reason})")
+    except Exception as ce:
+        print(f"  ❌ BŁĄD POŁĄCZENIA: {ce}")
+        print("    💡 Przyczyna: Serwer centralny nie jest uruchomiony, firewall blokuje port lub podano zły adres IP.")
+        print(f"    💡 Sprawdź: curl -I {server_url}/health lub uruchom uvicorn z flagą --host 0.0.0.0")
+
+    print("\n[4/5] Próba odczytu parametrów bezpieczeństwa OS (CIS):")
+    collector = OSParameterCollector()
+    try:
+        measurements = collector.collect_security_parameters(full_suite=True)
+        ok_count = sum(1 for m in measurements if m.status == "COLLECTED")
+        err_count = sum(1 for m in measurements if m.status == "ERROR")
+        na_count = sum(1 for m in measurements if m.status == "NOT_APPLICABLE")
+
+        print(f"  • Wykonano kontroli: {len(measurements)}")
+        print(f"  • Pobrane pomyślnie: {ok_count}")
+        print(f"  • Nie dotyczy (N/A): {na_count}")
+        print(f"  • Błędy odczytu:    {err_count}")
+
+        if err_count > 0:
+            print("\n  ❌ Szczegóły błędów poszczególnych kontroli:")
+            for m in measurements:
+                if m.status == "ERROR":
+                    print(f"    - [{m.check_id}] {m.title}: {m.error_message}")
+        else:
+            print("  • Wszystkie kolektory wykonały się bez błędów krytycznych!")
+    except Exception as exc:
+        print(f"  ❌ KRYTYCZNY BŁĄD KOLEKTORA: {exc}")
+
+    print("\n" + "=" * 72)
+    print(" Koniec diagnostyki.")
+    print("=" * 72)
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="SystemAuditor Enterprise Endpoint Agent")
     parser.add_argument(
@@ -1698,6 +1771,11 @@ def main() -> int:
         help="Jednorazowy token rejestracyjny Enrollment Token",
     )
     parser.add_argument(
+        "--diagnose",
+        action="store_true",
+        help="Uruchom tryb pełnej autodiagnostyki środowiska i połączenia (wypisuje błędy na ekran)",
+    )
+    parser.add_argument(
         "--daemon",
         action="store_true",
         help="Działaj w trybie ciągłej usługi w tle (cykliczny Heartbeat + Audyt CIS)",
@@ -1714,6 +1792,9 @@ def main() -> int:
         help="Pobierz wyłącznie 2 podstawowe parametry PoC zamiast pełnego zestawu reguł CIS",
     )
     args = parser.parse_args()
+
+    if args.diagnose:
+        return run_agent_diagnostics(args.server)
 
     policy_version = os.environ.get("AUDITOR_POLICY_VERSION", "2026.10.2")
     base_dir = Path(__file__).resolve().parent
